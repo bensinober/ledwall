@@ -1,8 +1,39 @@
-# README
+# HoloGlobe
 
-The coolest 3d hologlobe POV (persistence of vision)
+An insanely impractical 3D hologram rotating sphere POV (persistence of vision)
 
-Prerequisites:
+![pov 1](images/pov-globe-1.png)
+![pov 2](images/pov-globe-2.png)
+
+## What does it do?
+
+It spins a frame mount of programmable leds and updates insanely fast so that an image
+is formed on a spherical shape. Due to the persistent nature of the eye, this is perceived
+by the viewer as a floating semi-transparent image.
+
+## How is it done?
+
+Mainly 3d-print and lasercut, an RC speedboat engine and some rough electronics.
+The spinning frame is made by two programmable led strips handled by a Raspberry PI
+
+## What can it show?
+
+Spherical shapes mapped out on a 50x100 matrix, globes, death stars, heads, whatever.
+Image upload system is in progress...
+
+![earth-rotated](images/output_50x100.png)
+
+## Is it dangerous?
+
+Yes, it may actually burn up. That's why it needs to be contained.
+
+## Other noteworthy projects
+
+![deichman led wall](images/deichmanLedWall.png)
+![hoverglobe](images/hoverglobe.png)
+![laserprojector](images/laserprojector.png)
+
+## Prerequisites
 
 Raspbian install RPI3b+
 
