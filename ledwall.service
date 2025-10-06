@@ -1,0 +1,18 @@
+#ledWall.service
+# sudo ln -s /home/pi/ledwall.service /etc/systemd/system/ledwall.service
+# sudo systemctl daemon-reload
+[Unit]
+Description=Start ledwall app
+
+[Service]
+WorkingDirectory=/home/pi
+User=root
+Group=root
+Restart=always
+ExecStart=/home/pi/deichmanLedScreen-aarch64
+#Environment=DISPLAY=:0
+#Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket
+
+
+[Install]
+WantedBy=multi-user.target
