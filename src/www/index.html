@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Deichman Led Wall(tm)</title>
+        <style>
+            body {
+                font-family: sans-serif;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                margin-top: 20px;
+            }
+            .container {
+              display: flex; /* Establishes a flex container */
+              gap: 20px; /* Adds space between the columns */
+            }
+
+            .canvas-area {
+              flex: 1; /* Allows the canvas area to grow and take available space */
+              background-color: #f0f0f0; /* Example background for visualization */
+              padding: 10px;
+              border: 1px solid #ccc;
+            }
+
+            .controls-area {
+              flex-shrink: 0; /* Prevents the controls area from shrinking */
+              width: 200px; /* Sets a fixed width for the controls area */
+              background-color: #e0e0e0; /* Example background for visualization */
+              padding: 10px;
+              border: 1px solid #ccc;
+              display: flex; /* Make controls a flex container for vertical button stacking */
+              flex-direction: column; /* Stack buttons vertically */
+              gap: 10px; /* Space between buttons */
+            }
+            #canvas-container {
+                border: 1px solid #ccc;
+                display: grid;
+            }
+            .pixel {
+                width: 15px;
+                height: 15px;
+                background-color: #000000;
+                border: 1px solid #ddd;
+                box-sizing: border-box;
+            }
+            .pixel.active {
+                background-color: black;
+            }
+            button.active {
+                background-color: seagreen;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Deichman Led Wall (24x18)</h1>
+        <div class="container">
+            <div class="canvas-area">
+            <!-- Your canvas element goes here -->
+                <div id="canvas-container"></div>
+            </div>
+            <div class="controls-area">
+                <!-- Your button controls go here -->
+                <button id="clearCanvasBtn">Tøm tegning</button>
+                <button id="clearMatBtn">Tøm alt!</button>
+                <input type="color" id="colorPicker" value="#000000" />
+                <input type="file" id="imageUpload" accept="image/*" multiple />
+                <label for="textInput">Tekst:</label>
+                <input type="text" id="textInput" name="textInput" placeholder="skriv tekst" maxlength="20">
+
+                <label for="frameDelay">lengde (i ms):</label>
+                <input type="number" id="frameDelay" name="frameDelay" min="10" max="2000" value="200"/>
+                <button id="sendButton">Legg til!</button>
+            </div>
+        </div>
+
+        <script type="module" id="main">
+            import { setGrid, clearCanvas, clearMat, download, sendImageCanvas, loadPixels, textInput, createGrid, toggleActive, start, frameDelay } from "./script.js";
+            document.addEventListener("DOMContentLoaded", function () {
+                console.log("loaded")
+                // Initial grid creation
+                document.getElementById("clearCanvasBtn").addEventListener("click", clearCanvas)
+                document.getElementById("clearMatBtn").addEventListener("click", clearMat)
+                document.getElementById("imageUpload").addEventListener("change", loadPixels)
+                document.getElementById("textInput").addEventListener("change", textInput)
+                document.getElementById("frameDelay").addEventListener("change", frameDelay)
+                document.getElementById("sendButton").addEventListener("click", sendImageCanvas)
+                const width = 24
+                const height = 18
+                setGrid(height, width)
+                createGrid()
+            })
+        </script>
+    </body>
+</html>
