@@ -422,10 +422,30 @@ async function clearMat() {
   }
 }
 
+function leftBtn() {
+  return fetch("/left")
+}
+function upBtn() {
+  return fetch("/up")
+}
+function rightBtn() {
+  return fetch("/right")
+}
+function downBtn() {
+  return fetch("/down")
+}
+function gameStartBtn() {
+  return fetch("/gameStart")
+}
+
 // Event listeners for drawing
 document.addEventListener("mouseup", stopDrawing)
 canvasContainer.addEventListener("mouseleave", stopDrawing)
 canvasContainer.addEventListener('touchend', touchEnd, false)
 
 
-export { setGrid, createGrid, loadPixels, textInput, clearCanvas, clearMat, download, sendImageCanvas, toggleActive, start, frameDelay }
+
+export {
+  setGrid, createGrid, loadPixels, textInput, clearCanvas, clearMat, download, sendImageCanvas, toggleActive, start, frameDelay,
+  leftBtn, rightBtn, upBtn, downBtn, gameStartBtn,
+}

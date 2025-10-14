@@ -3,6 +3,8 @@
 # sudo systemctl daemon-reload
 [Unit]
 Description=Start ledwall app
+Wants=network-online.target
+After=network-online.target
 
 [Service]
 WorkingDirectory=/home/pi
