@@ -39,16 +39,18 @@ pub const Direction = enum {
 
 pub const Snake = struct {
     const Self = @This();
-    direction: Direction,
+
+    newDirection: Direction,
+    lastDirection: Direction,
     snakeLength: i32,
     playerX: i32,
     playerY: i32,
     cells: [numCells]Cell,
-    food: Cell, // always just one
+    food: i32, // always just one
     delay: u64, // inverted speed
     prng: std.Random.DefaultPrng,
 
-    pub fn init() !Self {
+    pub fn reset(self: *Self) !void {
         var cells: [numCells]Cell = undefined; // x, y, col
         const prng = std.Random.DefaultPrng.init(blk: {
             var seed: u64 = undefined;
@@ -60,51 +62,43 @@ pub const Snake = struct {
             const cell = Cell.indexToCell(i, 0);
             cells[i] = cell;
         }
-        return Self{
-            .direction = .up,
-            .snakeLength = 3,
-            .playerX = 1,
-            .playerY = 6,
-            .cells = cells,
-            .food = undefined,
-            .delay = 500 * 1000 * 1000, // start at 500ms
-            .prng = prng,
-        };
-    }
-    pub fn deinit(_: *Self) void {}
-
-    pub fn reset(self: *Self) void {
+        self.newDirection = .right;
+        self.lastDirection = .right;
         self.snakeLength = 3;
+        self.playerX = 1;
+        self.playerY = 6;
+        self.cells = cells;
+        self.food = undefined;
+        self.delay = 500 * 1000 * 1000;
+        self.prng = prng;
     }
 
     pub fn step(self: *Self) void {
-        self.move(Direction.right);
+        self.move();
     }
 
     // placeFood in an empty cell, just try until one fits
     pub fn placeFood(self: *Self) void {
         while (true) {
             const r = self.prng.random().uintLessThan(usize, numCells - 1);
-            //.intRangeAtMost(u8, 0, 255);
             if (self.cells[r].data == 0) {
-                const cell = Cell.indexToCell(r, 1);
-                self.food = cell; // actually not neccessary ?
+                self.food = @intCast(r);
                 return;
             }
         }
     }
 
-    fn move(self: *Self, direction: Direction) void {
-        if (direction == self.direction.opposite()) {
+    fn move(self: *Self) void {
+        if (self.newDirection == self.lastDirection.opposite()) {
             return; // don't allow
         }
-        if (direction == .left) {
+        if (self.newDirection == .left) {
             self.playerX -= 1;
-        } else if (direction == .up) {
+        } else if (self.newDirection == .up) {
             self.playerY += 1;
-        } else if (direction == .right) {
+        } else if (self.newDirection == .right) {
             self.playerX += 1;
-        } else if (direction == .down) {
+        } else if (self.newDirection == .down) {
             self.playerY -= 1;
         }
 
@@ -124,7 +118,20 @@ pub const Snake = struct {
             const p = self.cells[i];
             if (p.x == self.playerX) {
                 if (p.y == self.playerY) {
+                    // Snake head is on active cell
+                    if (self.cells[i].data > 0) {
+                        self.gameOver() catch |err| {
+                            std.debug.print("Failed setting gameover {any}\n", .{err});
+                        }; // Cell is occupied - crash
+                    }
+                    // set cell to length of snake
                     self.cells[i].data = self.snakeLength;
+
+                    // food eaten?
+                    if (i == self.food) {
+                        self.snakeLength += 1;
+                        self.placeFood();
+                    }
                 }
             }
             // decrease cell counter if occupied by a snake length
@@ -132,5 +139,12 @@ pub const Snake = struct {
                 self.cells[i].data -= 1;
             }
         }
+        self.lastDirection = self.newDirection;
+    }
+    fn gameOver(self: *Self) !void {
+        std.debug.print("GAME OVER\n", .{});
+        // TODO: Print something?
+        std.Thread.sleep(3 * 1000 * 1000 * 1000); // 3 secs
+        try self.reset();
     }
 };
