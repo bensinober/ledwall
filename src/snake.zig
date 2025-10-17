@@ -12,7 +12,7 @@ const Cell = struct {
     // get x/y coords in led grid, mirrors main.getLedNumberFromPoint
     pub fn indexToCell(i: usize, data: i32) Cell {
         const x: i32 = @intCast(i / height);
-        const y: i32 = @intCast(i % height);
+        const y: i32 = @intCast(height - (i % height) - 1);
         return Cell{
             .x = x,
             .y = y,
@@ -48,6 +48,7 @@ pub const Snake = struct {
     cells: [numCells]Cell,
     food: i32, // always just one
     delay: u64, // inverted speed
+    randomMove: bool,
     prng: std.Random.DefaultPrng,
 
     pub fn reset(self: *Self) !void {
@@ -69,12 +70,23 @@ pub const Snake = struct {
         self.playerY = 6;
         self.cells = cells;
         self.food = undefined;
-        self.delay = 500 * 1000 * 1000;
+        self.delay = 200 * 1000 * 1000;
+        self.randomMove = true;
         self.prng = prng;
+        self.placeFood();
     }
 
     pub fn step(self: *Self) void {
         self.move();
+        const r = self.prng.random().uintLessThan(usize, 10);
+        if (r == 5) {
+            const randMov = self.prng.random().uintLessThan(usize, 4);
+            self.newDirection = @enumFromInt(randMov);
+        }
+    }
+
+    pub fn setRandomMove(self: *Self) void {
+        self.randomMove = true;
     }
 
     // placeFood in an empty cell, just try until one fits
@@ -82,6 +94,7 @@ pub const Snake = struct {
         while (true) {
             const r = self.prng.random().uintLessThan(usize, numCells - 1);
             if (self.cells[r].data == 0) {
+                std.debug.print("Placing food on {any}\n", .{r});
                 self.food = @intCast(r);
                 return;
             }
@@ -90,7 +103,7 @@ pub const Snake = struct {
 
     fn move(self: *Self) void {
         if (self.newDirection == self.lastDirection.opposite()) {
-            return; // don't allow
+            self.newDirection = self.lastDirection; // don't allow
         }
         if (self.newDirection == .left) {
             self.playerX -= 1;
@@ -129,6 +142,7 @@ pub const Snake = struct {
 
                     // food eaten?
                     if (i == self.food) {
+                        std.debug.print("Yummy!! {d}\n", .{i});
                         self.snakeLength += 1;
                         self.placeFood();
                     }

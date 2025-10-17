@@ -32,6 +32,7 @@ var snakeGame: snake.Snake = snake.Snake{
     .cells = undefined,
     .food = undefined,
     .delay = 500 * 1000 * 1000,
+    .randomMove = true,
     .prng = undefined,
 };
 
@@ -46,18 +47,17 @@ export fn zig_write_handler(data: [*]const u8, length: usize) void {
         std.debug.print("{x} ", .{b});
         if (b == 0x61) { // a (left)
             snakeGame.newDirection = snake.Direction.left;
-        } else if (b == 0x77) { // w (up)
+        } else if (b == 0x73) { // w (up)
             snakeGame.newDirection = snake.Direction.up;
         } else if (b == 0x64) { // d (right)
             snakeGame.newDirection = snake.Direction.right;
-        } else if (b == 0x73) { // s (down)
+        } else if (b == 0x77) { // s (down)
             snakeGame.newDirection = snake.Direction.down;
         }
     }
     std.debug.print("\n", .{});
 }
 // END BLUES C WRAPPER
-
 
 pub const LEDMode = enum(u8) {
     IDLE,
@@ -338,7 +338,6 @@ pub const Server = struct {
             std.debug.print("START SNAKE GAME!\n", .{});
             try self.ledController.clearMat();
             try snakeGame.reset();
-            snakeGame.placeFood();
             ledMode = LEDMode.SNAKE;
             try req.respond("SNAKE", .{});
         } else if (req.head.method == .PUT and std.mem.eql(u8, req.head.target, "/setIdle")) {
@@ -464,6 +463,20 @@ pub const LedControl = struct {
         return led;
     }
 
+    pub fn getLedNumberFromPointInverse(x: usize, y: usize) usize {
+        const step = LEDSTRIP_ROWS; // y = 18
+        var led: usize = undefined;
+        if (x % 2 == 0) { // up from bottom
+            const bottom = (step * x);
+            led = bottom + y;
+        } else { // down from top
+            const top = step * x;
+            led = top + (step - y) - 1;
+        }
+        //std.debug.print("pixel: {d}, {d}, led nr: {d}\n", .{ x, y, led });
+        return led;
+    }
+
     // convert pixel to u32 and insert in led channel
     // pixel is rgba, strip is grb big endian (ws2811 lib does not handle conversion to grb)
     // order is big endian gbra!
@@ -533,8 +546,12 @@ pub const LedControl = struct {
         for (snakeGame.cells) |cell| {
             const x: usize = @intCast(cell.x);
             const y: usize = @intCast(cell.y);
+            const cellIdx: usize = getLedNumberFromPoint(x, y); // TOOD: make food an x,y cell?
             if (x == playerX and y == playerY) {
                 mat[y][x] = u32ToU8Bytes(0x0000ff00);
+            } else if (cellIdx == snakeGame.food) {
+                std.debug.print("FOOD is here: x: {d} - y: {d}\n", .{ x, y });
+                mat[y][x] = u32ToU8Bytes(0xff000000);
             } else if (cell.data > 0) {
                 std.debug.print("SNAKE is here: x: {d} - y: {d}\n", .{ x, y });
                 mat[y][x] = u32ToU8Bytes(0x00ff0000);
@@ -549,7 +566,7 @@ pub const LedControl = struct {
         } else {
             //std.debug.print("SNAKE MAT: {any}\n", .{self.mat});
         }
-        std.debug.print("SNAKE STATE: playerX: {d} playerY: {d}, lastDirection: {any}\n", .{snakeGame.playerX, snakeGame.playerY, snakeGame.lastDirection});
+        std.debug.print("SNAKE STATE: playerX: {d} playerY: {d}, lastDirection: {any}\n", .{ snakeGame.playerX, snakeGame.playerY, snakeGame.lastDirection });
     }
 
     pub fn renderTextAtPos(self: *Self, chars: []u8, x: i32, y: i32) !ArrayList(CharPixel) {
@@ -894,7 +911,10 @@ pub fn main() !void {
     const ledThread = try std.Thread.spawn(.{}, LedControl.runMatrix, .{&ledController});
     ledThread.detach();
 
-    const bleThread = try std.Thread.spawn(.{}, start_gatt_server, .{});
+    const bleThread = std.Thread.spawn(.{}, start_gatt_server, .{}) catch |err| {
+        std.debug.print("ERROR starting GATT server: {any}\n", .{err});
+        return err;
+    };
     bleThread.detach();
 
     var server = try Server.init(allocator, 8765, &ledController);
