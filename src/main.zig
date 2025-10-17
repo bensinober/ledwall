@@ -20,7 +20,44 @@ const ws2811 = @import("ws2811.zig");
 const img = @import("img.zig"); // TODO: use API to upload/convert images instead
 const eightbitFont = @import("eightbit_atari_stop2_font.zig");
 
-const Snake = @import("snake.zig").Snake;
+const snake = @import("snake.zig");
+
+// GLOBALS
+var snakeGame: snake.Snake = snake.Snake{
+    .newDirection = .right,
+    .lastDirection = .right,
+    .snakeLength = 3,
+    .playerX = 1,
+    .playerY = 6,
+    .cells = undefined,
+    .food = undefined,
+    .delay = 500 * 1000 * 1000,
+    .prng = undefined,
+};
+
+// BLUEZ C WRAPPER
+// C wrapper function to start server
+extern "c" fn start_gatt_server() void;
+
+// C calls this Zig function when characteristic is written
+export fn zig_write_handler(data: [*]const u8, length: usize) void {
+    std.debug.print("Zig received {d} bytes from GATT write: ", .{length});
+    for (data[0..length]) |b| {
+        std.debug.print("{x} ", .{b});
+        if (b == 0x61) { // a (left)
+            snakeGame.newDirection = snake.Direction.left;
+        } else if (b == 0x77) { // w (up)
+            snakeGame.newDirection = snake.Direction.up;
+        } else if (b == 0x64) { // d (right)
+            snakeGame.newDirection = snake.Direction.right;
+        } else if (b == 0x73) { // s (down)
+            snakeGame.newDirection = snake.Direction.down;
+        }
+    }
+    std.debug.print("\n", .{});
+}
+// END BLUES C WRAPPER
+
 
 pub const LEDMode = enum(u8) {
     IDLE,
@@ -300,9 +337,8 @@ pub const Server = struct {
         } else if (req.head.method == .PUT and std.mem.eql(u8, req.head.target, "/setSnake")) {
             std.debug.print("START SNAKE GAME!\n", .{});
             try self.ledController.clearMat();
-            var snake = try Snake.init();
-            snake.placeFood();
-            self.ledController.snake = &snake;
+            try snakeGame.reset();
+            snakeGame.placeFood();
             ledMode = LEDMode.SNAKE;
             try req.respond("SNAKE", .{});
         } else if (req.head.method == .PUT and std.mem.eql(u8, req.head.target, "/setIdle")) {
@@ -362,7 +398,6 @@ pub const LedControl = struct {
     allocator: Allocator,
     mutex: std.Thread.Mutex,
     frameDelay: u64,
-    snake: *Snake,
 
     pub fn init(allocator: Allocator, ledstrip: [*c]ws2811.ws2811_t) !Self {
         const images: ArrayList(ImageMat) = .empty;
@@ -377,7 +412,6 @@ pub const LedControl = struct {
             .allocator = allocator,
             .mutex = std.Thread.Mutex{},
             .frameDelay = 200,
-            .snake = undefined,
         };
     }
     pub fn deinit(self: *Self) void {
@@ -492,11 +526,11 @@ pub const LedControl = struct {
     }
 
     pub fn renderSnake(self: *Self) void {
-        self.snake.step();
+        snakeGame.step();
         var mat = createEmptyMat(0);
-        const playerX: usize = @intCast(self.snake.playerX);
-        const playerY: usize = @intCast(self.snake.playerY);
-        for (self.snake.cells) |cell| {
+        const playerX: usize = @intCast(snakeGame.playerX);
+        const playerY: usize = @intCast(snakeGame.playerY);
+        for (snakeGame.cells) |cell| {
             const x: usize = @intCast(cell.x);
             const y: usize = @intCast(cell.y);
             if (x == playerX and y == playerY) {
@@ -513,9 +547,9 @@ pub const LedControl = struct {
         if (@import("builtin").target.cpu.arch != std.Target.Cpu.Arch.x86_64) {
             _ = ws2811.ws2811_render(self.ptr);
         } else {
-            std.debug.print("SNAKE MAT: {any}\n", .{self.mat});
+            //std.debug.print("SNAKE MAT: {any}\n", .{self.mat});
         }
-        std.debug.print("SNAKE STATE: {any}\n", .{self.snake.playerX});
+        std.debug.print("SNAKE STATE: playerX: {d} playerY: {d}, lastDirection: {any}\n", .{snakeGame.playerX, snakeGame.playerY, snakeGame.lastDirection});
     }
 
     pub fn renderTextAtPos(self: *Self, chars: []u8, x: i32, y: i32) !ArrayList(CharPixel) {
@@ -732,7 +766,7 @@ pub const LedControl = struct {
                     self.renderSnake();
                     const end = try std.time.Instant.now();
                     std.debug.print("ns spent on snake render: {}\n", .{end.since(start)});
-                    std.Thread.sleep(self.snake.delay);
+                    std.Thread.sleep(snakeGame.delay);
                 },
                 else => {
                     std.debug.print("UNKNOWN STATE", .{});
@@ -857,12 +891,13 @@ pub fn main() !void {
     defer ledController.deinit();
 
     // spawn ledrunner in separate thread
+    const ledThread = try std.Thread.spawn(.{}, LedControl.runMatrix, .{&ledController});
+    ledThread.detach();
 
-    const thread = try std.Thread.spawn(.{}, LedControl.runMatrix, .{&ledController});
-    thread.detach();
+    const bleThread = try std.Thread.spawn(.{}, start_gatt_server, .{});
+    bleThread.detach();
 
     var server = try Server.init(allocator, 8765, &ledController);
     defer server.deinit();
-
     try server.serve();
 }
