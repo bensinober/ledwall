@@ -66,49 +66,16 @@ pub const LEDMode = enum(u8) {
     SNAKE,
     _,
 
-    // Probably no longer neccessary
     pub fn enum2str(self: LEDMode) []u8 {
         return std.meta.fields(?LEDMode)[self];
     }
     pub fn str2enum(str: []const u8) ?LEDMode {
-        return std.meta.stringToEnum(LEDMode, str);
+        return std.meta.stringToEnum(LEDMode, str) orelse LEDMode.IDLE;
     }
 };
+// initial mode
 var ledMode = LEDMode.ANIM;
 var lastLedMode = LEDMode.ANIM;
-
-//const websocket = @import("websocket");
-// var wsClient: websocket.Client = undefined; // Websocket client
-// const MsgHandler = struct {
-//     allocator: Allocator,
-
-//     // Handle Commands via websockets
-//     // 1. change LED Mode (enum)
-//     // 2. move snake
-//     // 3. send image?
-//     pub fn serverMessage(self: MsgHandler, msg: []u8) !void {
-//         std.log.debug("got msg: {any}", .{msg});
-//         const cmd = msg[0];
-//         if (cmd == 1) {
-//             const mode: LEDMode = @enumFromInt(msg[1]);
-//             lastLedMode = ledMode;
-//             ledMode = mode;
-//             const mb: u8 = std.mem.asBytes(&ledMode)[0];
-//             std.log.debug("switched mode from: {any} to {any}", .{ lastLedMode, ledMode });
-//             const res = try self.allocator.alloc(u8, 8);
-//             @memcpy(res, &[_]u8{ 0, mb, 2, 0, 0, 0, 0x4f, 0x4b }); // OK
-//             _ = try wsClient.writeBin(res);
-//         } else if (cmd == 2) {
-//             // move snake
-//         } else {
-//             const res = try self.allocator.alloc(u8, 8);
-//             const mb: u8 = std.mem.asBytes(&ledMode)[0];
-//             @memcpy(res, &[_]u8{ 0, mb, 2, 0, 0, 0, 0x4b, 0x4f }); // KO
-//             _ = try wsClient.writeBin(res);
-//         }
-//     }
-//     pub fn close(_: MsgHandler) void {}
-// };
 
 // *** GLOBALS ***
 
@@ -120,7 +87,6 @@ const LEDSTRIP_PIN_A = 18; // GPIO18 (12)
 const LEDSTRIP_COLS = 24;
 const LEDSTRIP_ROWS = 18;
 const LEDSTRIP_LENGTH = LEDSTRIP_COLS * LEDSTRIP_ROWS;
-//const LEDSTRIP_PIN_B = 13; // GPIO13(33)
 
 const JsonTextScroll = struct {
     text: []u8,
@@ -334,6 +300,18 @@ pub const Server = struct {
             try self.ledController.clearMat();
             try self.ledController.addInitialImg();
             try req.respond("0", .{});
+        } else if (req.head.method == .PUT and std.mem.eql(u8, req.head.target, "/setMode")) {
+            var len: usize = 0;
+            if (req.head.content_length) |contLen| {
+                len = @intCast(contLen);
+            }
+            const body = try reader.interface().take(len);
+            const mode = LEDMode.str2enum(body);
+            std.debug.print("NEW LedMode {any}!\n", .{mode});
+            ledMode = mode.?;
+            try req.respond("OK", .{ .status = .ok, .transfer_encoding = .chunked });
+        } else if (req.head.method == .GET and std.mem.eql(u8, req.head.target, "/getMode")) {
+            try req.respond(@tagName(ledMode), .{ .status = .ok, .transfer_encoding = .chunked });
         } else if (req.head.method == .PUT and std.mem.eql(u8, req.head.target, "/setSnake")) {
             std.debug.print("START SNAKE GAME!\n", .{});
             try self.ledController.clearMat();
@@ -850,11 +828,9 @@ pub fn main() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
     const arch = @import("builtin").target.cpu.arch;
-    // Prints to stderr, shortcut based on `std.io.getStdErr()`
-    std.debug.print("Testing zig for hologlobe Magic!.\n", .{});
 
     const addr = try getLocalAddress(allocator);
-    std.debug.print("hologlobe IP addr: {s}\n", .{addr});
+    std.debug.print("ledwall IP addr: {s}\n", .{addr});
 
     var ledstrip: ws2811.ws2811_t = undefined;
     // ws281x
@@ -906,7 +882,7 @@ pub fn main() !void {
     var ledController = try LedControl.init(allocator, &ledstrip);
     try ledController.addInitialImg();
     defer ledController.deinit();
-
+    try snakeGame.reset();
     // spawn ledrunner in separate thread
     const ledThread = try std.Thread.spawn(.{}, LedControl.runMatrix, .{&ledController});
     ledThread.detach();
