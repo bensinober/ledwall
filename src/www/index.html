@@ -11,28 +11,29 @@
                 flex-direction: column;
                 align-items: center;
                 margin-top: 20px;
+                height: 100dvh; /* Dynamic viewport height for modern browsers */
             }
             .container {
-              display: flex; /* Establishes a flex container */
-              gap: 20px; /* Adds space between the columns */
+                display: flex; /* Establishes a flex container */
+                gap: 20px; /* Adds space between the columns */
             }
 
             .canvas-area {
-              flex: 1; /* Allows the canvas area to grow and take available space */
-              background-color: #f0f0f0; /* Example background for visualization */
-              padding: 10px;
-              border: 1px solid #ccc;
+                flex: 1; /* Allows the canvas area to grow and take available space */
+                background-color: #f0f0f0; /* Example background for visualization */
+                padding: 10px;
+                border: 1px solid #ccc;
             }
 
             .controls-area {
-              flex-shrink: 0; /* Prevents the controls area from shrinking */
-              width: 200px; /* Sets a fixed width for the controls area */
-              background-color: #e0e0e0; /* Example background for visualization */
-              padding: 10px;
-              border: 1px solid #ccc;
-              display: flex; /* Make controls a flex container for vertical button stacking */
-              flex-direction: column; /* Stack buttons vertically */
-              gap: 10px; /* Space between buttons */
+                flex-shrink: 0; /* Prevents the controls area from shrinking */
+                width: 200px; /* Sets a fixed width for the controls area */
+                background-color: #e0e0e0; /* Example background for visualization */
+                padding: 10px;
+                border: 1px solid #ccc;
+                display: flex; /* Make controls a flex container for vertical button stacking */
+                flex-direction: column; /* Stack buttons vertically */
+                gap: 10px; /* Space between buttons */
             }
             #canvas-container {
                 border: 1px solid #ccc;
@@ -62,6 +63,7 @@
             </div>
             <div class="controls-area">
                 <!-- Your button controls go here -->
+                <button id="fullscreen">Fullskjerm</button>
                 <button id="clearCanvasBtn">Tøm tegning</button>
                 <button id="clearMatBtn">Tøm alt!</button>
                 <input type="color" id="colorPicker" value="#000000" />
@@ -76,10 +78,10 @@
         </div>
 
         <script type="module" id="main">
-            import { setGrid, clearCanvas, clearMat, download, sendImageCanvas, loadPixels, textInput, createGrid, toggleActive, start, frameDelay } from "./script.js";
+            import { setGrid, goFullscreen, clearCanvas, clearMat, download, sendImageCanvas, loadPixels, textInput, createGrid, toggleActive, start, frameDelay } from "./script.js";
             document.addEventListener("DOMContentLoaded", function () {
                 console.log("loaded")
-                // Initial grid creation
+                document.getElementById("fullscreen").addEventListener("click", goFullscreen)
                 document.getElementById("clearCanvasBtn").addEventListener("click", clearCanvas)
                 document.getElementById("clearMatBtn").addEventListener("click", clearMat)
                 document.getElementById("imageUpload").addEventListener("change", loadPixels)

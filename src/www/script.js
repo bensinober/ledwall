@@ -1,15 +1,31 @@
 const canvasContainer = document.getElementById("canvas-container")
-const imageUpload = document.getElementById("imageUpload");
+const imageUpload = document.getElementById("imageUpload")
+const colorPicker = document.getElementById("colorPicker")
 let width, height
 
 let pixels = []; // Stores the color of each pixel
 let isDrawing = false
 let activeWall = false
+let currentColor = colorPicker.value
+let originalOverflow
 
 function setGrid(h, w) {
   width = w
   height = h
 }
+
+const getCanvasPos = () => {
+  canvasContainer.getBoundingClientRect()
+}
+
+// Convert mouse or touch coordinates to grid coordinates
+const getGridCoords = (clientX, clientY) => {
+  const { left, top } = getCanvasPos()
+  const x = Math.floor((clientX - left) / width)
+  const y = Math.floor((clientY - top) / height)
+  return { x, y }
+}
+
 
 // Initialize the pixel grid
 function createGrid() {
@@ -20,40 +36,84 @@ function createGrid() {
   canvasContainer.style.gridTemplateRows = `repeat(${rows}, 1fr)`
   pixels = []
 
-  for (let i = 0; i < rows * cols; i++) {
-    const pixel = document.createElement("div")
-    pixel.classList.add("pixel")
-    pixel.dataset.index = i
-    pixel.style.backgroundColor = "#000000" // Default white
-    pixel.addEventListener("mousedown", startDrawing)
-    pixel.addEventListener("mouseover", draw)
-    pixel.addEventListener("touchstart", touchStart)
-    pixel.addEventListener("touchMove", touchMove)
-    canvasContainer.appendChild(pixel)
-    pixels.push("#000000") // Store default color
+  //for (let i = 0; i < rows * cols; i++) {
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const pixel = document.createElement("div")
+      pixel.classList.add("pixel")
+      //pixel.dataset.index = i
+      pixel.dataset.x = x
+      pixel.dataset.y = y
+      pixel.style.backgroundColor = "#000000" // Default black
+      canvasContainer.appendChild(pixel)
+      //pixels.push("#000000") // Store default color
+    }
   }
 }
 
-function startDrawing(event) {
+const startDrawing = (e) => {
   isDrawing = true
-  draw(event)
-}
+  originalOverflow = document.documentElement.style.overflow
+  document.documentElement.style.overflow = "hidden"
 
-function draw(event) {
-  if (!isDrawing) { return }
-  if (event.target.classList.contains("pixel")) {
-    event.target.style.backgroundColor = colorPicker.value
-    pixels[event.target.dataset.index] = colorPicker.value
+  // Handle single-pixel touch/click
+  if (e.target.classList.contains("pixel")) {
+    e.target.style.backgroundColor = currentColor
   }
 }
 
-function stopDrawing() {
+const stopDrawing = () => {
   isDrawing = false
+  document.documentElement.style.overflow = originalOverflow
 }
-// for touch
-function touchStart(event) { draw(event.touches[0]) }
-function touchMove(event) { draw(event.touches[0]); event.preventDefault(); }
-function touchEnd(event) { stopDrawing(event.changedTouches[0]) }
+
+// Continue drawing on mouse move or touch move
+const continueDrawing = (e) => {
+  if (!isDrawing) return
+
+  // Use `e.target` for mouse events
+  if (e.type === "mousemove" && e.target.classList.contains("pixel")) {
+    e.target.style.backgroundColor = currentColor
+  }
+
+  // For touch events, find the element at the touch coordinates
+  if (e.type === "touchmove") {
+    const touch = e.touches[0]
+    const targetElement = document.elementFromPoint(touch.clientX, touch.clientY)
+    if (targetElement && targetElement.classList.contains("pixel")) {
+      targetElement.style.backgroundColor = currentColor
+    }
+    e.preventDefault() // Prevent scrolling
+  }
+}
+
+const updateColor = (e) => {
+  currentColor = e.target.value
+}
+
+// Mouse events
+canvasContainer.addEventListener("mousedown", startDrawing)
+window.addEventListener("mouseup", stopDrawing)
+canvasContainer.addEventListener("mouseleave", stopDrawing)
+canvasContainer.addEventListener("mousemove", continueDrawing)
+
+// Touch events
+canvasContainer.addEventListener("touchstart", startDrawing, { passive: false })
+window.addEventListener("touchend", stopDrawing)
+canvasContainer.addEventListener("touchcancel", stopDrawing)
+canvasContainer.addEventListener("touchmove", continueDrawing, { passive: false })
+
+// Other controls
+colorPicker.addEventListener("change", updateColor)
+
+function goFullscreen() {
+  const elem = document.documentElement
+  if (elem.requestFullscreen) {
+    elem.requestFullscreen()
+  } else if (elem.webkitRequestFullscreen) { /* Safari */
+    elem.webkitRequestFullscreen()
+  }
+}
 
 // process image and transform to matrix
 async function processImage(img) {
@@ -186,11 +246,20 @@ function u32ToRgb(u32Color) {
   return `rgb(${r}, ${g}, ${b})`
 }
 
-function setPixel(x, y, col) {
-  const idx = ((height - y - 1) * width) + x // get index
-  const pixel = document.querySelector(`.pixel[data-index="${idx}"]`)
-  pixel.style.backgroundColor = u32ToRgb(col)
+// function setPixel(x, y, col) {
+//   const idx = ((height - y - 1) * width) + x // get index
+//   const pixel = document.querySelector(`.pixel[data-index="${idx}"]`)
+//   pixel.style.backgroundColor = u32ToRgb(col)
+// }
+
+const setPixel = (x, y, color) => {
+  // Find the pixel element using its dataset attributes
+  const pixelElement = document.querySelector(`.pixel[data-x="${x}"][data-y="${y}"]`)
+  if (pixelElement) {
+    pixelElement.style.backgroundColor = color
+  }
 }
+
 
 async function sendImageCanvas() {
   console.log("sending image")
@@ -438,14 +507,7 @@ function gameStartBtn() {
   return fetch("/gameStart")
 }
 
-// Event listeners for drawing
-document.addEventListener("mouseup", stopDrawing)
-canvasContainer.addEventListener("mouseleave", stopDrawing)
-canvasContainer.addEventListener('touchend', touchEnd, false)
-
-
-
 export {
-  setGrid, createGrid, loadPixels, textInput, clearCanvas, clearMat, download, sendImageCanvas, toggleActive, start, frameDelay,
+  setGrid, goFullscreen, createGrid, loadPixels, textInput, clearCanvas, clearMat, download, sendImageCanvas, toggleActive, start, frameDelay,
   leftBtn, rightBtn, upBtn, downBtn, gameStartBtn,
 }
