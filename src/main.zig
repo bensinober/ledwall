@@ -32,7 +32,8 @@ var snakeGame: snake.Snake = snake.Snake{
     .cells = undefined,
     .food = undefined,
     .delay = 500 * 1000 * 1000,
-    .randomMove = true,
+    .randomMove = false,
+    .gameOver = false,
     .prng = undefined,
 };
 
@@ -62,7 +63,7 @@ export fn zig_write_handler(data: [*]const u8, length: usize) void {
 pub const LEDMode = enum(u8) {
     IDLE,
     DRAW,
-    ANIM,
+    ANIMATION,
     SNAKE,
     _,
 
@@ -74,8 +75,8 @@ pub const LEDMode = enum(u8) {
     }
 };
 // initial mode
-var ledMode = LEDMode.ANIM;
-var lastLedMode = LEDMode.ANIM;
+var ledMode = LEDMode.ANIMATION;
+var lastLedMode = LEDMode.ANIMATION;
 
 // *** GLOBALS ***
 
@@ -300,34 +301,36 @@ pub const Server = struct {
             try self.ledController.clearMat();
             try self.ledController.addInitialImg();
             try req.respond("0", .{});
-        } else if (req.head.method == .PUT and std.mem.eql(u8, req.head.target, "/setMode")) {
-            var len: usize = 0;
-            if (req.head.content_length) |contLen| {
-                len = @intCast(contLen);
+        } else if (req.head.method == .GET and std.mem.startsWith(u8, req.head.target, "/setMode")) {
+            var paths = std.mem.splitScalar(u8, req.head.target, '/');
+            var i: usize = 0;
+            while (paths.next()) |p| {
+                if (i == 2) {
+                    const mode = LEDMode.str2enum(p);
+                    std.debug.print("NEW LedMode {any}!\n", .{mode});
+                    ledMode = mode.?;
+                }
+                i += 1;
             }
-            const body = try reader.interface().take(len);
-            const mode = LEDMode.str2enum(body);
-            std.debug.print("NEW LedMode {any}!\n", .{mode});
-            ledMode = mode.?;
+            try req.respond("OK", .{ .status = .ok, .transfer_encoding = .chunked });
+        } else if (req.head.method == .GET and std.mem.startsWith(u8, req.head.target, "/setDirection")) {
+            var paths = std.mem.splitScalar(u8, req.head.target, '/');
+            var i: usize = 0;
+            while (paths.next()) |p| {
+                if (i == 2) {
+                    const dir = snake.Direction.str2enum(p);
+                    std.debug.print("NEW Direction {any}!\n", .{dir});
+                    snakeGame.newDirection = dir.?;
+                }
+                i += 1;
+            }
             try req.respond("OK", .{ .status = .ok, .transfer_encoding = .chunked });
         } else if (req.head.method == .GET and std.mem.eql(u8, req.head.target, "/getMode")) {
             try req.respond(@tagName(ledMode), .{ .status = .ok, .transfer_encoding = .chunked });
-        } else if (req.head.method == .PUT and std.mem.eql(u8, req.head.target, "/setSnake")) {
-            std.debug.print("START SNAKE GAME!\n", .{});
+        } else if (req.head.method == .PUT and std.mem.eql(u8, req.head.target, "/setRandomSnake")) {
+            std.debug.print("RANDOM SNAKE MOVES!\n", .{});
             try self.ledController.clearMat();
-            try snakeGame.reset();
-            ledMode = LEDMode.SNAKE;
-            try req.respond("SNAKE", .{});
-        } else if (req.head.method == .PUT and std.mem.eql(u8, req.head.target, "/setIdle")) {
-            std.debug.print("SET IDLE STATE!\n", .{});
-            try self.ledController.clearMat();
-            ledMode = LEDMode.IDLE;
-            try req.respond("IDLE", .{});
-        } else if (req.head.method == .PUT and std.mem.eql(u8, req.head.target, "/setAnim")) {
-            std.debug.print("SET IDLE STATE!\n", .{});
-            try self.ledController.clearMat();
-            ledMode = LEDMode.ANIM;
-            try req.respond("ANIM", .{});
+            snakeGame.randomMove = true;
         } else {
             try req.respond("Not Found", .{ .status = .not_found });
         }
@@ -426,12 +429,12 @@ pub const LedControl = struct {
         std.debug.print("images in mat: {d}\n", .{self.images.items.len});
     }
 
-    // NB : y-axis is mirrored, as we start from top
-    pub fn getLedNumberFromPoint(x: usize, y: usize) usize {
+    // NB : y-axis is mirrored, as we start from top (x,y[0,0] is top left)
+    pub fn getLedNumberFromPointYInverse(x: usize, y: usize) usize {
         const step = LEDSTRIP_ROWS; // y = 18
         var led: usize = undefined;
         if (x % 2 == 0) { // up from bottom
-            const bottom = (step * x);
+            const bottom = step * x;
             led = bottom + (step - y) - 1;
         } else { // down from top
             const top = step * x;
@@ -440,12 +443,12 @@ pub const LedControl = struct {
         //std.debug.print("pixel: {d}, {d}, led nr: {d}\n", .{ x, y, led });
         return led;
     }
-
-    pub fn getLedNumberFromPointInverse(x: usize, y: usize) usize {
+    // (x,y[0,0] is bottom left)
+    pub fn getLedNumberFromPoint(x: usize, y: usize) usize {
         const step = LEDSTRIP_ROWS; // y = 18
         var led: usize = undefined;
         if (x % 2 == 0) { // up from bottom
-            const bottom = (step * x);
+            const bottom = step * x;
             led = bottom + y;
         } else { // down from top
             const top = step * x;
@@ -474,7 +477,7 @@ pub const LedControl = struct {
             defer self.mutex.unlock();
             for (0..LEDSTRIP_ROWS) |y| {
                 for (0..LEDSTRIP_COLS) |x| {
-                    const ledIdx = getLedNumberFromPoint(x, y);
+                    const ledIdx = getLedNumberFromPointYInverse(x, y);
                     self.setPixel(0, ledIdx, self.mat[y][x]);
                 }
             }
@@ -496,7 +499,7 @@ pub const LedControl = struct {
             for (self.images.items) |item| { // cannot use direct access of elements as Arraylist pointers can be invalidated when reallocated
                 for (0..LEDSTRIP_ROWS) |y| {
                     for (0..LEDSTRIP_COLS) |x| {
-                        const ledIdx = getLedNumberFromPoint(x, y);
+                        const ledIdx = getLedNumberFromPointYInverse(x, y);
                         self.setPixel(0, ledIdx, item.mat[y][x]);
                     }
                 }
@@ -516,8 +519,20 @@ pub const LedControl = struct {
         }
     }
 
-    pub fn renderSnake(self: *Self) void {
+    pub fn renderSnake(self: *Self) !void {
         snakeGame.step();
+        if (snakeGame.gameOver) {
+            var buf: [20]u8 = undefined;
+            self.cols(0x0000ff00);
+            const txt: []const u8 = "GAME OVER";
+            try self.setText(buf[0..txt.len], 200, 0x00ff0000, 0, 6, 5);
+            _ = try std.fmt.parseInt(i32, &buf, 10);
+            try self.setText(buf[0..@sizeOf(i32)], 1000, 0x00ff0000, 0, 6, 5);
+            self.renderImages();
+            try self.clearMat();
+            return;
+        }
+
         var mat = createEmptyMat(0);
         const playerX: usize = @intCast(snakeGame.playerX);
         const playerY: usize = @intCast(snakeGame.playerY);
@@ -526,16 +541,15 @@ pub const LedControl = struct {
             const y: usize = @intCast(cell.y);
             const cellIdx: usize = getLedNumberFromPoint(x, y); // TOOD: make food an x,y cell?
             if (x == playerX and y == playerY) {
+                std.debug.print("PLAYER is here: x: {d} - y: {d}, idx: {d}\n", .{ x, y, cellIdx });
                 mat[y][x] = u32ToU8Bytes(0x0000ff00);
             } else if (cellIdx == snakeGame.food) {
-                std.debug.print("FOOD is here: x: {d} - y: {d}\n", .{ x, y });
+                std.debug.print("FOOD is here: x: {d} - y: {d}, idx: {d}\n", .{ x, y, cellIdx });
                 mat[y][x] = u32ToU8Bytes(0xff000000);
             } else if (cell.data > 0) {
-                std.debug.print("SNAKE is here: x: {d} - y: {d}\n", .{ x, y });
+                //std.debug.print("SNAKE is here: x: {d} - y: {d}, idx: {d}\n", .{ x, y, cellIdx });
                 mat[y][x] = u32ToU8Bytes(0x00ff0000);
             }
-            // TODO: remove
-            //const ledIdx = getLedNumberFromPoint(x, y);
         }
         self.mat = mat;
         self.renderMat();
@@ -544,7 +558,7 @@ pub const LedControl = struct {
         } else {
             //std.debug.print("SNAKE MAT: {any}\n", .{self.mat});
         }
-        std.debug.print("SNAKE STATE: playerX: {d} playerY: {d}, lastDirection: {any}\n", .{ snakeGame.playerX, snakeGame.playerY, snakeGame.lastDirection });
+        std.debug.print("SNAKE STATE: playerX: {d} playerY: {d}, lastDirection: {any}, length: {d}\n", .{ snakeGame.playerX, snakeGame.playerY, snakeGame.lastDirection, snakeGame.snakeLength });
     }
 
     pub fn renderTextAtPos(self: *Self, chars: []u8, x: i32, y: i32) !ArrayList(CharPixel) {
@@ -748,7 +762,7 @@ pub const LedControl = struct {
             switch (ledMode) {
                 .IDLE => {},
                 .DRAW => {},
-                .ANIM => {
+                .ANIMATION => {
                     self.cols(0x00ff00);
                     const start = try std.time.Instant.now();
                     self.renderImages();
@@ -758,7 +772,7 @@ pub const LedControl = struct {
                 },
                 .SNAKE => {
                     const start = try std.time.Instant.now();
-                    self.renderSnake();
+                    try self.renderSnake();
                     const end = try std.time.Instant.now();
                     std.debug.print("ns spent on snake render: {}\n", .{end.since(start)});
                     std.Thread.sleep(snakeGame.delay);
@@ -781,7 +795,7 @@ pub const LedControl = struct {
     }
     // reads pixel data stream to mat of x,y coords (rows * cols)
     // transform png data [][4]u8 to led matrix pixel vector (mat[row][col]pixel) [rows][cols][4]u8 prepared for led strip length
-    // NB : image data sent over wire starts top left, we need to set pixels in same order
+    // NB : image data sent over wire starts top left, we need to set pixels in same order (getLedNumberFromPointYInverse)
     pub fn imgbytes2matrix(bytes: []const u8) ![LEDSTRIP_ROWS][LEDSTRIP_COLS][4]u8 {
         var stream = std.io.fixedBufferStream(bytes);
         const reader = stream.reader();

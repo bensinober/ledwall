@@ -11,13 +11,27 @@
                 flex-direction: column;
                 align-items: center;
                 margin-top: 20px;
-                height: 100dvh; /* Dynamic viewport height for modern browsers */
+            }
+
+            .navButtons {
+                padding: 10px;
+                display: grid;
+                gap: 2em;
+                grid-template-columns: repeat(4, 1fr);
+            }
+            .navBtn {
+                width: 10em;
+                height: 3em;
+                background-color: green;
+                border-radius: 10px;
+            }
+            .navBtn:active {
+                background-color: lightgreen;
             }
             .container {
                 display: flex; /* Establishes a flex container */
                 gap: 20px; /* Adds space between the columns */
             }
-
             .canvas-area {
                 flex: 1; /* Allows the canvas area to grow and take available space */
                 background-color: #f0f0f0; /* Example background for visualization */
@@ -25,7 +39,7 @@
                 border: 1px solid #ccc;
             }
 
-            .controls-area {
+            .controlButtons {
                 flex-shrink: 0; /* Prevents the controls area from shrinking */
                 width: 200px; /* Sets a fixed width for the controls area */
                 background-color: #e0e0e0; /* Example background for visualization */
@@ -52,17 +66,45 @@
             button.active {
                 background-color: seagreen;
             }
+            .gameButtons {
+                justify-content: center;
+                align-items: center;
+                display: grid;
+                gap: 10px;
+                grid-template-columns: repeat(3, 1fr);
+                aspect-ratio: 1 / 1;
+                box-sizing: border-box;
+            }
+            .gameButtonItem {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                aspect-ratio: 1 / 1;
+            }
+            .gameButton {
+                color: black;
+                background-color: lightblue;
+                border: 1px solid black;
+                border-radius: 10px;
+            }
+            .gameButton:active {
+                background-color: grey;
+                box-shadow: 5px;
+            }
         </style>
     </head>
     <body>
-        <h1>Deichman Led Wall (24x18)</h1>
+        <div class="navButtons">
+            <button class="navBtn" value="DRAW" id="drawMode">DRAW</button>
+            <button class="navBtn" value="ANIMATION" id="animMode">ANIMATION</button>
+            <button class="navBtn" value="SNAKE" id="snakeMode">SNAKE</button>
+            <button class="navBtn" value="IDLE" id="idleMode">IDLE</button>
+        </div>
         <div class="container">
             <div class="canvas-area">
-            <!-- Your canvas element goes here -->
                 <div id="canvas-container"></div>
             </div>
-            <div class="controls-area">
-                <!-- Your button controls go here -->
+            <div class="controlButtons">
                 <button id="fullscreen">Fullskjerm</button>
                 <button id="clearCanvasBtn">Tøm tegning</button>
                 <button id="clearMatBtn">Tøm alt!</button>
@@ -75,12 +117,28 @@
                 <input type="number" id="frameDelay" name="frameDelay" min="10" max="2000" value="200"/>
                 <button id="sendButton">Legg til!</button>
             </div>
+            <div class="gameButtons">
+                <div class="gameButtonItem"></div>
+                <div class="gameButtonItem gameButton" id="gamePadUp">UP</div>
+                <div class="gameButtonItem"></div>
+                <div class="gameButtonItem gameButton" id="gamePadLeft">LEFT</div>
+                <div class="gameButtonItem gameButton" id="gamePadStart">START</div>
+                <div class="gameButtonItem gameButton" id="gamePadRight">RIGHT</div>
+                <div class="gameButtonItem"></div>
+                <div class="gameButtonItem gameButton" id="gamePadDown">DOWN</div>
+                <div class="gameButtonItem"></div>
+            </div>
         </div>
 
         <script type="module" id="main">
-            import { setGrid, goFullscreen, clearCanvas, clearMat, download, sendImageCanvas, loadPixels, textInput, createGrid, toggleActive, start, frameDelay } from "./script.js";
+            import { setGrid, goFullscreen, setMode, clearCanvas, clearMat, download, sendImageCanvas, loadPixels, textInput, createGrid,
+              toggleActive, frameDelay, upBtn, leftBtn, downBtn, rightBtn, gameStartBtn } from "./script.js";
             document.addEventListener("DOMContentLoaded", function () {
                 console.log("loaded")
+                document.getElementById("drawMode").addEventListener("click", setMode)
+                document.getElementById("animMode").addEventListener("click", setMode)
+                document.getElementById("snakeMode").addEventListener("click", setMode)
+                document.getElementById("idleMode").addEventListener("click", setMode)
                 document.getElementById("fullscreen").addEventListener("click", goFullscreen)
                 document.getElementById("clearCanvasBtn").addEventListener("click", clearCanvas)
                 document.getElementById("clearMatBtn").addEventListener("click", clearMat)
@@ -88,6 +146,11 @@
                 document.getElementById("textInput").addEventListener("change", textInput)
                 document.getElementById("frameDelay").addEventListener("change", frameDelay)
                 document.getElementById("sendButton").addEventListener("click", sendImageCanvas)
+                document.getElementById("gamePadLeft").addEventListener("click", leftBtn)
+                document.getElementById("gamePadUp").addEventListener("click", upBtn)
+                document.getElementById("gamePadDown").addEventListener("click", downBtn)
+                document.getElementById("gamePadRight").addEventListener("click", rightBtn)
+                document.getElementById("gamePadStart").addEventListener("click", gameStartBtn)
                 const width = 24
                 const height = 18
                 setGrid(height, width)

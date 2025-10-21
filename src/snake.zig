@@ -12,7 +12,12 @@ const Cell = struct {
     // get x/y coords in led grid, mirrors main.getLedNumberFromPoint
     pub fn indexToCell(i: usize, data: i32) Cell {
         const x: i32 = @intCast(i / height);
-        const y: i32 = @intCast(height - (i % height) - 1);
+        var y: i32 = 0;
+        if (@mod(x, 2) == 0) {
+            y = @intCast(i % height);
+        } else {
+            y = @intCast(height - (i % height) - 1);
+        }
         return Cell{
             .x = x,
             .y = y,
@@ -35,6 +40,9 @@ pub const Direction = enum {
             .down => .up,
         };
     }
+    pub fn str2enum(str: []const u8) ?Direction {
+        return std.meta.stringToEnum(Direction, str) orelse Direction.right;
+    }
 };
 
 pub const Snake = struct {
@@ -49,6 +57,7 @@ pub const Snake = struct {
     food: i32, // always just one
     delay: u64, // inverted speed
     randomMove: bool,
+    gameOver: bool,
     prng: std.Random.DefaultPrng,
 
     pub fn reset(self: *Self) !void {
@@ -67,21 +76,24 @@ pub const Snake = struct {
         self.lastDirection = .right;
         self.snakeLength = 3;
         self.playerX = 1;
-        self.playerY = 6;
+        self.playerY = 2;
         self.cells = cells;
         self.food = undefined;
         self.delay = 200 * 1000 * 1000;
-        self.randomMove = true;
+        self.randomMove = false;
+        self.gameOver = false;
         self.prng = prng;
         self.placeFood();
     }
 
     pub fn step(self: *Self) void {
         self.move();
-        const r = self.prng.random().uintLessThan(usize, 10);
-        if (r == 5) {
-            const randMov = self.prng.random().uintLessThan(usize, 4);
-            self.newDirection = @enumFromInt(randMov);
+        if (self.randomMove == true) {
+            const r = self.prng.random().uintLessThan(usize, 10);
+            if (r == 5) {
+                const randMov = self.prng.random().uintLessThan(usize, 4);
+                self.newDirection = @enumFromInt(randMov);
+            }
         }
     }
 
@@ -128,14 +140,15 @@ pub const Snake = struct {
         }
 
         for (0..numCells) |i| {
-            const p = self.cells[i];
-            if (p.x == self.playerX) {
-                if (p.y == self.playerY) {
+            const c = self.cells[i];
+            if (c.x == self.playerX) {
+                if (c.y == self.playerY) {
                     // Snake head is on active cell
                     if (self.cells[i].data > 0) {
-                        self.gameOver() catch |err| {
+                        // Cell is occupied - crash
+                        self.setGameOver() catch |err| {
                             std.debug.print("Failed setting gameover {any}\n", .{err});
-                        }; // Cell is occupied - crash
+                        };
                     }
                     // set cell to length of snake
                     self.cells[i].data = self.snakeLength;
@@ -149,16 +162,17 @@ pub const Snake = struct {
                 }
             }
             // decrease cell counter if occupied by a snake length
-            if (p.data != 0) {
+            if (c.data != 0) {
                 self.cells[i].data -= 1;
             }
         }
         self.lastDirection = self.newDirection;
     }
-    fn gameOver(self: *Self) !void {
+    fn setGameOver(self: *Self) !void {
         std.debug.print("GAME OVER\n", .{});
+        self.gameOver = true;
         // TODO: Print something?
-        std.Thread.sleep(3 * 1000 * 1000 * 1000); // 3 secs
+        std.Thread.sleep(10 * 1000 * 1000 * 1000); // 10 secs
         try self.reset();
     }
 };

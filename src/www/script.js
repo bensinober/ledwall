@@ -491,23 +491,32 @@ async function clearMat() {
   }
 }
 
+function setMode(e) {
+  const mode = e.target.value
+  console.log(mode)
+  try {
+    fetch(`/setMode/${mode}`)
+  } catch (err) {
+    console.log(err)
+  }
+}
 function leftBtn() {
-  return fetch("/left")
+  return fetch("/setDirection/left")
 }
 function upBtn() {
-  return fetch("/up")
+  return fetch("/setDirection/up")
 }
 function rightBtn() {
-  return fetch("/right")
+  return fetch("/setDirection/right")
 }
 function downBtn() {
-  return fetch("/down")
+  return fetch("/setDirection/down")
 }
 function gameStartBtn() {
-  return fetch("/gameStart")
+  return fetch("/setMode/SNAKE") // or reset?
 }
 
 export {
-  setGrid, goFullscreen, createGrid, loadPixels, textInput, clearCanvas, clearMat, download, sendImageCanvas, toggleActive, start, frameDelay,
+  setGrid, goFullscreen, setMode, createGrid, loadPixels, textInput, clearCanvas, clearMat, download, sendImageCanvas, toggleActive, start, frameDelay,
   leftBtn, rightBtn, upBtn, downBtn, gameStartBtn,
 }
