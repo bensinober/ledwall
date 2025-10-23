@@ -500,17 +500,19 @@ function setMode(e) {
     console.log(err)
   }
 }
+
+// NB: up down reversed
 function leftBtn() {
   return fetch("/setDirection/left")
 }
 function upBtn() {
-  return fetch("/setDirection/up")
+  return fetch("/setDirection/down")
 }
 function rightBtn() {
   return fetch("/setDirection/right")
 }
 function downBtn() {
-  return fetch("/setDirection/down")
+  return fetch("/setDirection/up")
 }
 function gameStartBtn() {
   return fetch("/setMode/SNAKE") // or reset?

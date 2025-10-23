@@ -79,13 +79,15 @@
                 display: flex;
                 justify-content: center;
                 align-items: center;
+                width: 120px;
+                height: 120px;
                 aspect-ratio: 1 / 1;
             }
             .gameButton {
                 color: black;
                 background-color: lightblue;
                 border: 1px solid black;
-                border-radius: 10px;
+                border-radius: 20px;
             }
             .gameButton:active {
                 background-color: grey;
@@ -95,10 +97,9 @@
     </head>
     <body>
         <div class="navButtons">
-            <button class="navBtn" value="DRAW" id="drawMode">DRAW</button>
             <button class="navBtn" value="ANIMATION" id="animMode">ANIMATION</button>
             <button class="navBtn" value="SNAKE" id="snakeMode">SNAKE</button>
-            <button class="navBtn" value="IDLE" id="idleMode">IDLE</button>
+            <button class="navBtn" value="IDLE" id="idleMode">PAUSE</button>
         </div>
         <div class="container">
             <div class="canvas-area">
@@ -135,7 +136,6 @@
               toggleActive, frameDelay, upBtn, leftBtn, downBtn, rightBtn, gameStartBtn } from "./script.js";
             document.addEventListener("DOMContentLoaded", function () {
                 console.log("loaded")
-                document.getElementById("drawMode").addEventListener("click", setMode)
                 document.getElementById("animMode").addEventListener("click", setMode)
                 document.getElementById("snakeMode").addEventListener("click", setMode)
                 document.getElementById("idleMode").addEventListener("click", setMode)

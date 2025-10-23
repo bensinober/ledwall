@@ -172,7 +172,7 @@ pub const Snake = struct {
         std.debug.print("GAME OVER\n", .{});
         self.gameOver = true;
         // TODO: Print something?
-        std.Thread.sleep(10 * 1000 * 1000 * 1000); // 10 secs
-        try self.reset();
+        //std.Thread.sleep(10 * 1000 * 1000 * 1000); // 10 secs
+        //try self.reset();
     }
 };

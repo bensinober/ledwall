@@ -62,7 +62,6 @@ export fn zig_write_handler(data: [*]const u8, length: usize) void {
 
 pub const LEDMode = enum(u8) {
     IDLE,
-    DRAW,
     ANIMATION,
     SNAKE,
     _,
@@ -520,19 +519,20 @@ pub const LedControl = struct {
     }
 
     pub fn renderSnake(self: *Self) !void {
-        snakeGame.step();
         if (snakeGame.gameOver) {
-            var buf: [20]u8 = undefined;
             self.cols(0x0000ff00);
-            const txt: []const u8 = "GAME OVER";
-            try self.setText(buf[0..txt.len], 200, 0x00ff0000, 0, 6, 5);
-            _ = try std.fmt.parseInt(i32, &buf, 10);
-            try self.setText(buf[0..@sizeOf(i32)], 1000, 0x00ff0000, 0, 6, 5);
+            try self.setText(@constCast("GAME OVER"), 300, 0, 0x00ff0000, 9, 5);
+            std.Thread.sleep(1 * 1000 * 1000 * 1000);
+            try self.setText(@constCast("SCORE"), 300, 0, 0x00ff0000, 9, 5);
+            std.Thread.sleep(1 * 1000 * 1000 * 1000);
+            var scoreBuf: [4]u8 = undefined;
+            const scoreTxt = try std.fmt.bufPrint(&scoreBuf, "{d}", .{snakeGame.snakeLength});
+            try self.setText(scoreTxt, 3000, 0, 0x00ff0000, 9, 5);
             self.renderImages();
             try self.clearMat();
-            return;
+            try snakeGame.reset();
         }
-
+        snakeGame.step();
         var mat = createEmptyMat(0);
         const playerX: usize = @intCast(snakeGame.playerX);
         const playerY: usize = @intCast(snakeGame.playerY);
@@ -761,7 +761,6 @@ pub const LedControl = struct {
         while (true) {
             switch (ledMode) {
                 .IDLE => {},
-                .DRAW => {},
                 .ANIMATION => {
                     self.cols(0x00ff00);
                     const start = try std.time.Instant.now();
