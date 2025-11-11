@@ -2,8 +2,8 @@
 
 A large (2x3m) neopixel wall of 24x18 paper cups with backmounted programmable leds
 
-![deichman led wall](images/deichmanLedWall.png)
-![palette1](images/palette1.jpg)
+![deichman led wall](docs/images/deichmanLedWall.png)
+![palette1](docs/images/palette1.jpg)
 
 Courtesy of creator.no: The physical wall was created by Creator Makerspace in Stavanger and kindly
 donated to Deichman Makerspace in advance of the Oslo Maker Faire 2025.
