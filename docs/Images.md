@@ -1,5 +1,5 @@
 # Images
 
-![cat](cat2.jpg)
-![minecraft](minecraft.jpg)
-![pumpkin](pumpkin.jpg)
+![cat](images/cat2.jpg)
+![minecraft](images/minecraft.jpg)
+![pumpkin](images/pumpkin.jpg)
