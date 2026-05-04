@@ -48,6 +48,7 @@ pub const Direction = enum {
 pub const Snake = struct {
     const Self = @This();
 
+    io: std.Io,
     newDirection: Direction,
     lastDirection: Direction,
     snakeLength: i32,
@@ -58,15 +59,10 @@ pub const Snake = struct {
     delay: u64, // inverted speed
     randomMove: bool,
     gameOver: bool,
-    prng: std.Random.DefaultPrng,
 
     pub fn reset(self: *Self) !void {
         var cells: [numCells]Cell = undefined; // x, y, col
-        const prng = std.Random.DefaultPrng.init(blk: {
-            var seed: u64 = undefined;
-            try std.posix.getrandom(std.mem.asBytes(&seed));
-            break :blk seed;
-        });
+
         // prefill cells with x,y and zeroes
         for (0..numCells) |i| {
             const cell = Cell.indexToCell(i, 0);
@@ -82,17 +78,22 @@ pub const Snake = struct {
         self.delay = 200 * 1000 * 1000;
         self.randomMove = false;
         self.gameOver = false;
-        self.prng = prng;
         self.placeFood();
     }
 
     pub fn step(self: *Self) void {
         self.move();
         if (self.randomMove == true) {
-            const r = self.prng.random().uintLessThan(usize, 10);
+            // want a random direction 0 - 1 - 2 - 3 for a random move 1/10th
+            var buf: [1]u8 = undefined; // = 0-254 so we need to map to relevant size 0-10
+            self.io.random(&buf);
+            const rand1: u32 = buf[0];
+            const r: u32 = @intCast((rand1 * 10) / 254); // map 0-254 to 0-10
             if (r == 5) {
-                const randMov = self.prng.random().uintLessThan(usize, 4);
-                self.newDirection = @enumFromInt(randMov);
+                self.io.random(&buf);
+                const rand2: u32 = buf[0];
+                const r2: u32 = @intCast((rand2 * 4) / 254); // map 0-254 to 0-4
+                self.newDirection = @enumFromInt(r2);
             }
         }
     }
@@ -104,7 +105,11 @@ pub const Snake = struct {
     // placeFood in an empty cell, just try until one fits
     pub fn placeFood(self: *Self) void {
         while (true) {
-            const r = self.prng.random().uintLessThan(usize, numCells - 1);
+            var buf: [2]u8 = undefined;
+            self.io.random(&buf);
+            const rand: u32 = (@as(u16, buf[0]) << 8) | buf[1];
+            const max = std.math.maxInt(u16); // 65535
+            const r: usize = @intCast((rand * numCells - 1) / max); // map u16 (0-65535) to total cells (432)
             if (self.cells[r].data == 0) {
                 std.debug.print("Placing food on {any}\n", .{r});
                 self.food = @intCast(r);

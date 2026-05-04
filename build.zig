@@ -2,18 +2,7 @@ const std = @import("std");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-
-    // Standard optimization options allow the person running `zig build` to select
-    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
-    // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
-
-    // const lodepng_translate_step = b.addTranslateC(.{
-    //     .root_source_file = b.path("include/lodepng.h"),
-    //     .target = target,
-    //     .optimize = optimize,
-    //     .link_libc = true, // Link with libc if your C code uses it
-    // });
 
     const cSourceFiles = &[_][]const u8{
         "lib/bluez/libbluetooth/bluetooth.c",
@@ -62,13 +51,13 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/main.zig"),
             .target = target,
             .optimize = optimize,
+            .link_libc = true,
         }),
     });
-    exe.linkLibC();
-    exe.linkSystemLibrary("gpiod");
-    exe.linkSystemLibrary("ws2811");
-    exe.linkLibrary(exeBluezLib);
-    exe.addIncludePath(b.path("include"));
+    exe.root_module.addIncludePath(b.path("include"));
+    exe.root_module.linkSystemLibrary("gpiod", .{});
+    exe.root_module.linkSystemLibrary("ws2811", .{});
+    exe.root_module.linkLibrary(exeBluezLib);
 
     _ = b.installArtifact(exe);
 
@@ -120,13 +109,12 @@ pub fn build(b: *std.Build) void {
         .linkage = .static,
         .root_module = armBluezMod,
     });
-    arm.linkLibC();
-    arm.linkSystemLibrary("gpiod");
-    arm.addLibraryPath(b.path("lib/armv7"));
-    //arm.linkLibrary("ws2811");
-    arm.addObjectFile(b.path("lib/armv7/libws2811.a"));
-    arm.addIncludePath(b.path("include"));
-    arm.linkLibrary(armBluezLib);
+    arm.root_module.addLibraryPath(b.path("lib/armv7"));
+    arm.root_module.addIncludePath(b.path("include"));
+    arm.root_module.linkSystemLibrary("gpiod", .{});
+    //arm.root_module.linkLibrary("ws2811");
+    arm.root_module.addObjectFile(b.path("lib/armv7/libws2811.a"));
+    arm.root_module.linkLibrary(armBluezLib);
 
     _ = b.installArtifact(arm);
     //zigcvMod.addCSourceFile(.{ .file = b.path("libs/asyncarray.cpp"), .flags = &[_][]const u8{"-Wall","-Wextra","-std=c++11", "-stdlib=libc++" } });
@@ -167,12 +155,11 @@ pub fn build(b: *std.Build) void {
         .linkage = .static,
         .root_module = aarchBluezMod,
     });
-    aarch.linkLibC();
-    aarch.linkSystemLibrary("gpiod");
-    aarch.addLibraryPath(b.path("lib/aarch64"));
-    aarch.addObjectFile(b.path("lib/aarch64/libws2811.a"));
-    aarch.addIncludePath(b.path("include"));
-    aarch.linkLibrary(aarchBluezLib);
+    aarch.root_module.addLibraryPath(b.path("lib/aarch64"));
+    aarch.root_module.addIncludePath(b.path("include"));
+    aarch.root_module.linkSystemLibrary("gpiod", .{});
+    aarch.root_module.addObjectFile(b.path("lib/aarch64/libws2811.a"));
+    aarch.root_module.linkLibrary(aarchBluezLib);
     _ = b.installArtifact(aarch);
 
 }

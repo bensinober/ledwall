@@ -24,6 +24,7 @@ const snake = @import("snake.zig");
 
 // GLOBALS
 var snakeGame: snake.Snake = snake.Snake{
+    .io = undefined,
     .newDirection = .right,
     .lastDirection = .right,
     .snakeLength = 3,
@@ -34,7 +35,6 @@ var snakeGame: snake.Snake = snake.Snake{
     .delay = 500 * 1000 * 1000,
     .randomMove = false,
     .gameOver = false,
-    .prng = undefined,
 };
 
 // BLUEZ C WRAPPER
@@ -107,40 +107,42 @@ const JsonText = struct {
 
 pub const Server = struct {
     allocator: Allocator,
-    listener: std.net.Server,
+    io: std.Io,
+    listener: std.Io.net.Server,
     ledController: *LedControl,
     // Add other fields as needed, e.g., for routing, database connections, etc.
 
-    pub fn init(allocator: std.mem.Allocator, port: u16, ledController: *LedControl) !Server {
-        const address = try std.net.Address.parseIp("0.0.0.0", port);
-        const listener = try address.listen(.{ .reuse_address = true });
+    pub fn init(allocator: std.mem.Allocator, io: std.Io, port: u16, ledController: *LedControl) !Server {
+        const address = try std.Io.net.IpAddress.parse("0.0.0.0", port);
+        const listener = try address.listen(io, .{ .reuse_address = true });
         std.debug.print("Listening on {d}\n", .{port});
 
         return Server{
             .allocator = allocator,
+            .io = io,
             .listener = listener,
             .ledController = ledController,
         };
     }
 
     pub fn deinit(self: *Server) void {
-        self.listener.deinit();
+        self.listener.deinit(self.io);
     }
 
     pub fn serve(self: *Server) !void {
         while (true) {
-            try self.handleConnection(try self.listener.accept());
+            try self.handleConnection(try self.listener.accept(self.io));
         }
     }
 
     // Request handler function (example)
-    pub fn handleConnection(self: *Server, conn: net.Server.Connection) !void {
+    pub fn handleConnection(self: *Server, conn: std.Io.net.Stream) !void {
         //defer conn.stream.close();
         var recvBuf: [4096]u8 = undefined;
         var sendBuf: [4096]u8 = undefined;
-        var reader = conn.stream.reader(&recvBuf);
-        var writer = conn.stream.writer(&sendBuf);
-        var httpServer = std.http.Server.init(reader.interface(), &writer.interface);
+        var reader = conn.reader(self.io, &recvBuf);
+        var writer = conn.writer(self.io, &sendBuf);
+        var httpServer = std.http.Server.init(&reader.interface, &writer.interface);
         var req = try httpServer.receiveHead();
         std.debug.print("Received request: {any}\n", .{req});
 
@@ -204,22 +206,22 @@ pub const Server = struct {
             // LED CONTROL
 
         } else if (req.head.method == .PUT and std.mem.eql(u8, req.head.target, "/cycle")) {
-            self.ledController.cycleColours();
+            try self.ledController.cycleColours();
             try req.respond("CYCLE", .{ .status = .ok, .transfer_encoding = .chunked });
         } else if (req.head.method == .PUT and std.mem.eql(u8, req.head.target, "/rows")) {
-            self.ledController.rows(255);
+            try self.ledController.rows(255);
             try req.respond("ROWS", .{ .status = .ok, .transfer_encoding = .chunked });
         } else if (req.head.method == .PUT and std.mem.eql(u8, req.head.target, "/cols")) {
-            self.ledController.cols(255);
+            try self.ledController.cols(255);
             try req.respond("COLS", .{ .status = .ok, .transfer_encoding = .chunked });
         } else if (req.head.method == .POST and std.mem.eql(u8, req.head.target, "/frameDelay")) {
             var len: usize = 0;
             if (req.head.content_length) |contLen| {
                 len = @intCast(contLen);
             }
-            const body = try reader.interface().take(len);
+            const body = try reader.interface.take(len);
             const frameDelay: u64 = try std.fmt.parseInt(u64, body, 10); // 10 specifies base 10 (decimal)
-            self.ledController.setFrameDelay(frameDelay);
+            try self.ledController.setFrameDelay(frameDelay);
             std.debug.print("Frame delay set: {d}\n", .{frameDelay});
             try req.respond("OK", .{ .status = .ok, .transfer_encoding = .chunked });
         } else if (req.head.method == .POST and std.mem.eql(u8, req.head.target, "/setText")) {
@@ -227,7 +229,7 @@ pub const Server = struct {
             if (req.head.content_length) |contLen| {
                 len = @intCast(contLen);
             }
-            const body = try reader.interface().take(len);
+            const body = try reader.interface.take(len);
             const jsonBody = std.json.parseFromSlice(JsonText, self.allocator, body, .{}) catch |err| {
                 std.debug.print("ERROR parsing json body: {any}\n", .{err});
                 try req.respond(@errorName(err), .{ .status = .internal_server_error });
@@ -242,7 +244,7 @@ pub const Server = struct {
             if (req.head.content_length) |contLen| {
                 len = @intCast(contLen);
             }
-            const body = try reader.interface().take(len);
+            const body = try reader.interface.take(len);
             const jsonBody = std.json.parseFromSlice(JsonTextScroll, self.allocator, body, .{}) catch |err| {
                 std.debug.print("ERROR parsing json body: {any}\n", .{err});
                 try req.respond(@errorName(err), .{ .status = .internal_server_error });
@@ -267,7 +269,7 @@ pub const Server = struct {
                 },
             });
         } else if (req.head.method == .PUT and std.mem.eql(u8, req.head.target, "/toggleActive")) {
-            self.ledController.toggleActive();
+            try self.ledController.toggleActive();
             const response = std.fmt.allocPrint(self.allocator, "NEW STATE: {any}\n", .{self.ledController.activeMatrix}) catch @panic("Failed to format status line");
             try req.respond(response, .{ .status = .ok, .transfer_encoding = .chunked });
             // TODO: disable this? start whenever app is started
@@ -286,7 +288,7 @@ pub const Server = struct {
             }
             //std.debug.print("READER: seek {any} en {any}\n", .{reader.file_reader.interface.seek, reader.file_reader.interface.end});
             // TODO: accept json body + frameDelay
-            const body = try reader.interface().take(len);
+            const body = try reader.interface.take(len);
             std.debug.print("UPLOAD len: {d} - body: {any}\n", .{ len, reader });
             const num: usize = self.ledController.addImg(body, self.ledController.frameDelay) catch |err| {
                 std.debug.print("Error uploading image: {}\n", .{err});
@@ -333,7 +335,7 @@ pub const Server = struct {
         } else {
             try req.respond("Not Found", .{ .status = .not_found });
         }
-        conn.stream.close();
+        conn.close(self.io);
     }
 
     fn sendFile(writer: std.io.Writer, filename: []const u8) !void {
@@ -368,28 +370,30 @@ const ImageMat = struct {
 pub const LedControl = struct {
     const Self = @This();
 
-    ptr: [*c]ws2811.ws2811_t,
+    ptr: *ws2811.ws2811_t,
+    io: std.Io,
     activeMatrix: bool,
     images: ArrayList(ImageMat), // TODO: rename to frames?
     mat: [LEDSTRIP_ROWS][LEDSTRIP_COLS][4]u8, // use as overlay
     activeTextScroll: bool,
     text: []u8,
     allocator: Allocator,
-    mutex: std.Thread.Mutex,
+    mutex: std.Io.Mutex,
     frameDelay: u64,
 
-    pub fn init(allocator: Allocator, ledstrip: [*c]ws2811.ws2811_t) !Self {
+    pub fn init(allocator: Allocator, io: std.Io, ledstrip: *ws2811.ws2811_t) !Self {
         const images: ArrayList(ImageMat) = .empty;
         const mat = createEmptyMat(0);
         return Self{
             .ptr = ledstrip,
+            .io = io,
             .activeMatrix = true, // default start
             .images = images,
             .mat = mat,
             .activeTextScroll = false,
             .text = undefined,
             .allocator = allocator,
-            .mutex = std.Thread.Mutex{},
+            .mutex = std.Io.Mutex.init,
             .frameDelay = 200,
         };
     }
@@ -400,16 +404,16 @@ pub const LedControl = struct {
     }
 
     pub fn addInitialImg(self: *Self) !void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        try self.mutex.lock(self.io);
+        defer self.mutex.unlock(self.io);
         const mat = try imgbytes2matrix(&img.DATA);
         const imageMat: ImageMat = .{ .mat = mat, .frameDelay = 3000 };
         try self.images.append(self.allocator, imageMat);
     }
 
     pub fn addImg(self: *Self, imageBytes: []u8, frameDelay: u64) !usize {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        try self.mutex.lock(self.io);
+        defer self.mutex.unlock(self.io);
         const mat = imgbytes2matrix(imageBytes) catch |err| {
             std.debug.print("Error adding image: {}\n", .{err});
             return err;
@@ -422,8 +426,8 @@ pub const LedControl = struct {
     }
 
     pub fn clearMat(self: *Self) !void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        try self.mutex.lock(self.io);
+        defer self.mutex.unlock(self.io);
         self.images = .empty;
         std.debug.print("images in mat: {d}\n", .{self.images.items.len});
     }
@@ -473,7 +477,7 @@ pub const LedControl = struct {
     // Render single self.mat
     pub fn renderMat(self: *Self) void {
         if (self.mutex.tryLock()) {
-            defer self.mutex.unlock();
+            defer self.mutex.unlock(self.io);
             for (0..LEDSTRIP_ROWS) |y| {
                 for (0..LEDSTRIP_COLS) |x| {
                     const ledIdx = getLedNumberFromPointYInverse(x, y);
@@ -491,9 +495,9 @@ pub const LedControl = struct {
     }
     // render images to led wall
     // source image is 24x18 24bit, reads from top left
-    pub fn renderImages(self: *Self) void {
+    pub fn renderImages(self: *Self) !void {
         if (self.mutex.tryLock()) {
-            defer self.mutex.unlock();
+            defer self.mutex.unlock(self.io);
             std.debug.print("ITEMs: {d}\n", .{self.images.items.len});
             for (self.images.items) |item| { // cannot use direct access of elements as Arraylist pointers can be invalidated when reallocated
                 for (0..LEDSTRIP_ROWS) |y| {
@@ -508,7 +512,7 @@ pub const LedControl = struct {
                     std.debug.print("ITEM frameDelay: {d}\n", .{item.frameDelay});
                 }
                 if (item.frameDelay < 5000) {
-                    std.Thread.sleep(item.frameDelay * 1000 * 1000); // frameDelay in ms
+                    try self.io.sleep(std.Io.Duration.fromMilliseconds(@as(i64, @intCast(item.frameDelay))), .real);
                 } else {
                     std.debug.print("FISHY: frameDelay: {d}, {any}\n", .{ item.frameDelay, item.mat });
                 }
@@ -520,15 +524,16 @@ pub const LedControl = struct {
 
     pub fn renderSnake(self: *Self) !void {
         if (snakeGame.gameOver) {
-            self.cols(0x0000ff00);
+            try self.cols(0x0000ff00);
             try self.setText(@constCast("GAME OVER"), 300, 0, 0x00ff0000, 9, 5);
-            std.Thread.sleep(1 * 1000 * 1000 * 1000);
+            try self.io.sleep(std.Io.Duration.fromMilliseconds(1000), .real);
             try self.setText(@constCast("SCORE"), 300, 0, 0x00ff0000, 9, 5);
-            std.Thread.sleep(1 * 1000 * 1000 * 1000);
+            try self.io.sleep(std.Io.Duration.fromMilliseconds(1000), .real);
+
             var scoreBuf: [4]u8 = undefined;
             const scoreTxt = try std.fmt.bufPrint(&scoreBuf, "{d}", .{snakeGame.snakeLength});
             try self.setText(scoreTxt, 3000, 0, 0x00ff0000, 9, 5);
-            self.renderImages();
+            try self.renderImages();
             try self.clearMat();
             try snakeGame.reset();
         }
@@ -597,8 +602,8 @@ pub const LedControl = struct {
     }
 
     pub fn setText(self: *Self, chars: []u8, frameDelay: u64, bg: u32, fg: u32, startX: i32, startY: i32) !void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        try self.mutex.lock(self.io);
+        defer self.mutex.unlock(self.io);
         for (chars) |char| {
             const charBytes = eightbitFont.getCharBytes(char);
             var i: i32 = 0;
@@ -626,8 +631,8 @@ pub const LedControl = struct {
     }
 
     pub fn runTextScroll(self: *Self, chars: []u8) !void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        try self.mutex.lock(self.io);
+        defer self.mutex.unlock(self.io);
         if (self.activeMatrix == true) {
             self.activeMatrix = false;
         }
@@ -649,7 +654,7 @@ pub const LedControl = struct {
                 }
             }
             self.mat = mat;
-            std.Thread.sleep(100 * 1000 * 1000); // 100 ms
+            try self.io.sleep(std.Io.Duration.fromMilliseconds(100), .real);
             startX -= 1;
         }
     }
@@ -659,12 +664,13 @@ pub const LedControl = struct {
         if (@import("builtin").target.cpu.arch != std.Target.Cpu.Arch.x86_64) {
             var i: usize = 0;
             while (i < LEDSTRIP_LENGTH) : (i += 1) {
-                self.ptr.*.channel[0].leds[i] = col;
+                const channel = self.ptr.*.channel[0];
+                channel.leds[i] = col;
             }
         }
     }
 
-    pub fn rows(self: *Self, col: u32) void {
+    pub fn rows(self: *Self, col: u32) !void {
         if (@import("builtin").target.cpu.arch != std.Target.Cpu.Arch.x86_64) {
             for (0..LEDSTRIP_ROWS) |y| {
                 for (0..LEDSTRIP_COLS) |x| {
@@ -672,14 +678,14 @@ pub const LedControl = struct {
                     self.ptr.*.channel[0].leds[ledIdx] = col;
                 }
                 _ = ws2811.ws2811_render(self.ptr); // show row
-                std.Thread.sleep(10 * 1000 * 1000);
+                try self.io.sleep(std.Io.Duration.fromMilliseconds(10), .real);
             }
             self.setColour(0);
             _ = ws2811.ws2811_render(self.ptr); // show row
         }
     }
 
-    pub fn cols(self: *Self, col: u32) void {
+    pub fn cols(self: *Self, col: u32) !void {
         if (@import("builtin").target.cpu.arch != std.Target.Cpu.Arch.x86_64) {
             for (0..LEDSTRIP_COLS) |x| {
                 for (0..LEDSTRIP_ROWS) |y| {
@@ -687,7 +693,7 @@ pub const LedControl = struct {
                     self.ptr.*.channel[0].leds[ledIdx] = col;
                 }
                 _ = ws2811.ws2811_render(self.ptr); // show row
-                std.Thread.sleep(1 * 1000 * 1000);
+                try self.io.sleep(std.Io.Duration.fromMilliseconds(1), .real);
             }
             self.setColour(0);
             _ = ws2811.ws2811_render(self.ptr);
@@ -700,7 +706,7 @@ pub const LedControl = struct {
                     self.ptr.*.channel[0].leds[ledIdx] = col;
                 }
                 _ = ws2811.ws2811_render(self.ptr); // show row
-                std.Thread.sleep(1 * 1000 * 1000);
+                try self.io.sleep(std.Io.Duration.fromMilliseconds(1), .real);
             }
             self.setColour(0);
             _ = ws2811.ws2811_render(self.ptr);
@@ -708,51 +714,60 @@ pub const LedControl = struct {
     }
 
     // Startup, blink blue, red, green
-    pub fn cycleColours(self: *Self) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-        var timer = std.time.Timer.start() catch |err| {
-            std.debug.print("err: {any}\n", .{err});
-            return;
-        };
+    pub fn cycleColours(self: *Self) !void {
+        try self.mutex.lock(self.io);
+        defer self.mutex.unlock(self.io);
+        var start: std.Io.Timestamp = undefined;
+        start = std.Io.Clock.awake.now(self.io);
+
         self.setColour(0xff0000); // blue
         if (@import("builtin").target.cpu.arch != std.Target.Cpu.Arch.x86_64) {
             _ = ws2811.ws2811_render(self.ptr);
         }
-        std.debug.print("ns spent on green cycle: {}\n", .{timer.lap()});
-        std.Thread.sleep(500 * 1000 * 1000);
-        timer.reset();
-        //self.setColour(0x00ff00); // red
+        var elapsed = start.untilNow(self.io, .awake);
+        var ns = elapsed.toNanoseconds();
+        std.debug.print("ns spent on green cycle: {}\n", .{ns});
+
+        try self.io.sleep(std.Io.Duration.fromMilliseconds(500), .real);
+
+        start = std.Io.Clock.awake.now(self.io);
         self.setColour(0xed1c24); // red
         if (@import("builtin").target.cpu.arch != std.Target.Cpu.Arch.x86_64) {
             _ = ws2811.ws2811_render(self.ptr);
         }
-        std.debug.print("ns spent on red cycle: {}\n", .{timer.lap()});
-        std.Thread.sleep(1500 * 1000 * 1000);
-        timer.reset();
+        elapsed = start.untilNow(self.io, .awake);
+        ns = elapsed.toNanoseconds();
+        std.debug.print("ns spent on red cycle: {}\n", .{ns});
+
+        try self.io.sleep(std.Io.Duration.fromMilliseconds(1500), .real);
+
+        start = std.Io.Clock.awake.now(self.io);
         self.setColour(0x0000ff); // green
         if (@import("builtin").target.cpu.arch != std.Target.Cpu.Arch.x86_64) {
             _ = ws2811.ws2811_render(self.ptr);
         }
-        std.debug.print("ns spent on blue cycle: {}\n", .{timer.lap()});
-        std.Thread.sleep(500 * 1000 * 1000);
+        elapsed = start.untilNow(self.io, .awake);
+        ns = elapsed.toNanoseconds();
+        std.debug.print("ns spent on blue cycle: {}\n", .{ns});
+        try self.io.sleep(std.Io.Duration.fromMilliseconds(500), .real);
+
         self.setColour(0x000000);
         if (@import("builtin").target.cpu.arch != std.Target.Cpu.Arch.x86_64) {
             _ = ws2811.ws2811_render(self.ptr);
         }
-        std.Thread.sleep(1000 * 1000 * 1000);
+        try self.io.sleep(std.Io.Duration.fromMilliseconds(1000), .real);
     }
 
-    pub fn toggleActive(self: *Self) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+    pub fn toggleActive(self: *Self) !void {
+        try self.mutex.lock(self.io);
+        defer self.mutex.unlock(self.io);
         self.activeMatrix = !self.activeMatrix;
     }
 
     // TODO: remove
-    pub fn setFrameDelay(self: *Self, fd: u64) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+    pub fn setFrameDelay(self: *Self, fd: u64) !void {
+        try self.mutex.lock(self.io);
+        defer self.mutex.unlock(self.io);
         self.frameDelay = fd;
     }
 
@@ -762,19 +777,21 @@ pub const LedControl = struct {
             switch (ledMode) {
                 .IDLE => {},
                 .ANIMATION => {
-                    self.cols(0x00ff00);
-                    const start = try std.time.Instant.now();
-                    self.renderImages();
-                    const end = try std.time.Instant.now();
-                    std.debug.print("ns spent on full render: {}\n", .{end.since(start)});
-                    std.Thread.sleep(1 * 1000 * 1000 * 1000); // 1s pause between runs of anim
+                    try self.cols(0x00ff00);
+                    const start = std.Io.Clock.awake.now(self.io);
+                    try self.renderImages();
+                    var elapsed = start.untilNow(self.io, .awake);
+                    const ns = elapsed.toNanoseconds();
+                    std.debug.print("ns spent on full render: {}\n", .{ns});
+                    try self.io.sleep(std.Io.Duration.fromMilliseconds(1000), .real);
                 },
                 .SNAKE => {
-                    const start = try std.time.Instant.now();
+                    const start = std.Io.Clock.awake.now(self.io);
                     try self.renderSnake();
-                    const end = try std.time.Instant.now();
-                    std.debug.print("ns spent on snake render: {}\n", .{end.since(start)});
-                    std.Thread.sleep(snakeGame.delay);
+                    var elapsed = start.untilNow(self.io, .awake);
+                    const ns = elapsed.toNanoseconds();
+                    std.debug.print("ns spent on snake render: {}\n", .{ns});
+                    try self.io.sleep(std.Io.Duration.fromMilliseconds(@as(i64, @intCast(snakeGame.delay))), .real);
                 },
                 else => {
                     std.debug.print("UNKNOWN STATE", .{});
@@ -796,16 +813,12 @@ pub const LedControl = struct {
     // transform png data [][4]u8 to led matrix pixel vector (mat[row][col]pixel) [rows][cols][4]u8 prepared for led strip length
     // NB : image data sent over wire starts top left, we need to set pixels in same order (getLedNumberFromPointYInverse)
     pub fn imgbytes2matrix(bytes: []const u8) ![LEDSTRIP_ROWS][LEDSTRIP_COLS][4]u8 {
-        var stream = std.io.fixedBufferStream(bytes);
-        const reader = stream.reader();
+        var reader = std.Io.Reader.fixed(bytes);
         var mat: [LEDSTRIP_ROWS][LEDSTRIP_COLS][4]u8 = undefined;
         var pixel: [4]u8 = undefined; // in bigendian MSB format
-        outer: for (0..LEDSTRIP_ROWS) |row| {
+        for (0..LEDSTRIP_ROWS) |row| {
             for (0..LEDSTRIP_COLS) |col| {
-                const bytes_read = try reader.read(pixel[0..]);
-                if (bytes_read == 0) {
-                    break :outer; // no more data
-                }
+                try reader.readSliceAll(pixel[0..]); // read to buffer is full
                 mat[row][col] = pixel;
             }
         }
@@ -813,19 +826,18 @@ pub const LedControl = struct {
     }
 };
 
-// Get WIFI IP address by fake UDP connection
-pub fn getLocalAddress(alloc: Allocator) ![]const u8 {
-    const addr = try std.net.Address.parseIp("1.1.1.1", 0);
-    const sock = try posix.socket(posix.AF.INET, posix.SOCK.DGRAM, posix.IPPROTO.UDP);
-    defer posix.close(sock);
-    try posix.connect(sock, &addr.any, addr.getOsSockLen());
-
-    var address: net.Address = undefined;
-    var len: posix.socklen_t = @sizeOf(net.Address);
-    try posix.getsockname(sock, &address.any, &len);
-    const out = try std.fmt.allocPrint(alloc, "{any}", .{address});
+// Get WIFI IP address by fake UDP connection to 1.1.1.1
+pub fn getLocalAddress(io: std.Io, alloc: Allocator) ![]const u8 {
+    const local = try std.Io.net.IpAddress.parse("0.0.0.0", 0);
+    const remote = try std.Io.net.IpAddress.parse("1.1.1.1", 0);
+    var socket = try local.bind(io, .{ .mode = .dgram, .protocol = .udp });
+    defer socket.close(io);
+    const conn = try remote.connect(io, .{ .mode = .dgram });
+    const address = conn.socket.address;
+    const out = try std.fmt.allocPrint(alloc, "{f}", .{address});
     return out;
 }
+
 pub fn onCharRead() void {
     return;
 }
@@ -836,13 +848,18 @@ pub fn getChar() void {
     return;
 }
 
-pub fn main() !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
+pub fn main(init: std.process.Init) !void {
+    // init IO
+    const allocator = init.arena.allocator();
+    const io = init.io;
+    const args = try init.minimal.args.toSlice(allocator);
+
+    for (args) |arg| {
+        std.log.info("Argument: {s}", .{arg});
+    }
     const arch = @import("builtin").target.cpu.arch;
 
-    const addr = try getLocalAddress(allocator);
+    const addr = try getLocalAddress(io, allocator);
     std.debug.print("ledwall IP addr: {s}\n", .{addr});
 
     var ledstrip: ws2811.ws2811_t = undefined;
@@ -867,7 +884,7 @@ pub fn main() !void {
                     .invert = 0,
                     .count = LEDSTRIP_LENGTH,
                     .strip_type = ws2811.WS2811_STRIP_RGB,
-                    .leds = null,
+                    .leds = undefined,
                     .brightness = 255,
                     .wshift = 0x00,
                     .rshift = 0x00,
@@ -880,7 +897,7 @@ pub fn main() !void {
                     .invert = 0,
                     .count = 0,
                     .strip_type = ws2811.WS2811_STRIP_RGB,
-                    .leds = null,
+                    .leds = undefined,
                     .brightness = 0,
                     .wshift = 0x00,
                     .rshift = 0x00,
@@ -892,9 +909,10 @@ pub fn main() !void {
         };
         _ = ws2811.ws2811_init(&ledstrip);
     }
-    var ledController = try LedControl.init(allocator, &ledstrip);
+    var ledController = try LedControl.init(allocator, io, &ledstrip);
     try ledController.addInitialImg();
     defer ledController.deinit();
+    snakeGame.io = io;
     try snakeGame.reset();
     // spawn ledrunner in separate thread
     const ledThread = try std.Thread.spawn(.{}, LedControl.runMatrix, .{&ledController});
@@ -906,7 +924,7 @@ pub fn main() !void {
     };
     bleThread.detach();
 
-    var server = try Server.init(allocator, 8765, &ledController);
+    var server = try Server.init(allocator, io, 8765, &ledController);
     defer server.deinit();
     try server.serve();
 }
