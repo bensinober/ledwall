@@ -5,107 +5,131 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Deichman Led Wall(tm)</title>
         <style>
+            :root {
+                color-scheme: dark;
+                --bg: #0e1116;
+                --panel: #161b22;
+                --panel-edge: #262e3a;
+                --text: #e6e9ef;
+                --muted: #7c8798;
+                --accent: #38bdf8;
+            }
+            * { box-sizing: border-box; }
             body {
-                font-family: sans-serif;
+                font-family: system-ui, sans-serif;
+                background: radial-gradient(1200px 600px at 50% -10%, #182233 0%, var(--bg) 60%);
+                color: var(--text);
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                margin-top: 20px;
+                margin: 0;
+                padding: 24px 16px 48px;
+                min-height: 100vh;
             }
-
-            .navButtons {
-                padding: 10px;
-                display: grid;
-                gap: 2em;
-                grid-template-columns: repeat(4, 1fr);
+            header {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 16px;
+                margin-bottom: 24px;
             }
-            .navBtn {
-                width: 10em;
-                height: 3em;
-                background-color: green;
-                border-radius: 10px;
+            h1 {
+                margin: 0;
+                font-size: 1.6rem;
+                font-weight: 700;
+                letter-spacing: 0.02em;
             }
-            .navBtn:active {
-                background-color: lightgreen;
-            }
+            h1 span { color: var(--accent); }
             .container {
-                display: flex; /* Establishes a flex container */
-                gap: 20px; /* Adds space between the columns */
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 20px;
+            }
+            .card {
+                background: var(--panel);
+                border: 1px solid var(--panel-edge);
+                border-radius: 16px;
+                padding: 16px;
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
             }
             .canvas-area {
-                flex: 1; /* Allows the canvas area to grow and take available space */
-                background-color: #f0f0f0; /* Example background for visualization */
-                padding: 10px;
-                border: 1px solid #ccc;
-            }
-
-            .controlButtons {
-                flex-shrink: 0; /* Prevents the controls area from shrinking */
-                width: 200px; /* Sets a fixed width for the controls area */
-                background-color: #e0e0e0; /* Example background for visualization */
-                padding: 10px;
-                border: 1px solid #ccc;
-                display: flex; /* Make controls a flex container for vertical button stacking */
-                flex-direction: column; /* Stack buttons vertically */
-                gap: 10px; /* Space between buttons */
+                background: #0a0d12;
+                border: 1px solid var(--panel-edge);
+                border-radius: 16px;
+                padding: 16px;
             }
             #canvas-container {
-                border: 1px solid #ccc;
                 display: grid;
+                gap: 1px;
+                background: var(--panel-edge);
+                border: 2px solid rgba(255, 255, 255, 0.85);
+                border-radius: 8px;
+                overflow: hidden;
             }
             .pixel {
-                width: 15px;
-                height: 15px;
+                width: 18px;
+                height: 18px;
                 background-color: #000000;
-                border: 1px solid #ddd;
-                box-sizing: border-box;
             }
-            .pixel.active {
-                background-color: black;
-            }
-            button.active {
-                background-color: seagreen;
-            }
-            .gameButtons {
-                justify-content: center;
-                align-items: center;
-                display: grid;
-                gap: 10px;
-                grid-template-columns: repeat(3, 1fr);
-                aspect-ratio: 1 / 1;
-                box-sizing: border-box;
-            }
-            .gameButtonItem {
+            .controlButtons {
+                width: 230px;
                 display: flex;
-                justify-content: center;
+                flex-direction: column;
+                gap: 10px;
+            }
+            .controlButtons label {
+                font-size: 0.85rem;
+                color: var(--muted);
+                margin-top: 4px;
+            }
+            .controlButtons input[type="text"],
+            .controlButtons input[type="number"] {
+                background: #0a0d12;
+                color: var(--text);
+                border: 1px solid var(--panel-edge);
+                border-radius: 8px;
+                padding: 8px 10px;
+                font: inherit;
+            }
+            .controlButtons input[type="file"] {
+                font-size: 0.8rem;
+                color: var(--muted);
+            }
+            .controlButtons button,
+            .controlButtons input[type="color"] {
+                font: 600 0.9rem system-ui, sans-serif;
+                padding: 10px 12px;
+                color: var(--text);
+                background: #1a2028;
+                border: 1px solid var(--panel-edge);
+                border-radius: 10px;
+                cursor: pointer;
+            }
+            .controlButtons button:hover { background: #232c38; }
+            .controlButtons button:active { transform: scale(0.98); }
+            .pad-card {
+                display: flex;
                 align-items: center;
-                width: 120px;
-                height: 120px;
-                aspect-ratio: 1 / 1;
+                justify-content: center;
+                min-width: 300px;
             }
-            .gameButton {
-                color: black;
-                background-color: lightblue;
-                border: 1px solid black;
-                border-radius: 20px;
+            .hidden-mode {
+                display: none !important;
             }
-            .gameButton:active {
-                background-color: grey;
-                box-shadow: 5px;
-            }
+            button.active { background-color: seagreen; }
         </style>
     </head>
     <body>
-        <div class="navButtons">
-            <button class="navBtn" value="ANIMATION" id="animMode">ANIMATION</button>
-            <button class="navBtn" value="SNAKE" id="snakeMode">SNAKE</button>
-            <button class="navBtn" value="IDLE" id="idleMode">PAUSE</button>
-        </div>
+        <header>
+            <h1>Deichman <span>Led Wall</span> (24x18)</h1>
+            <ledwall-mode-bar></ledwall-mode-bar>
+        </header>
         <div class="container">
-            <div class="canvas-area">
+            <div class="canvas-area" id="canvasArea">
                 <div id="canvas-container"></div>
             </div>
-            <div class="controlButtons">
+            <div class="controlButtons card" id="drawTools">
                 <button id="fullscreen">Fullskjerm</button>
                 <button id="clearCanvasBtn">Tøm tegning</button>
                 <button id="clearMatBtn">Tøm alt!</button>
@@ -113,32 +137,21 @@
                 <input type="file" id="imageUpload" accept="image/*" multiple />
                 <label for="textInput">Tekst:</label>
                 <input type="text" id="textInput" name="textInput" placeholder="skriv tekst" maxlength="20">
-
                 <label for="frameDelay">lengde (i ms):</label>
                 <input type="number" id="frameDelay" name="frameDelay" min="10" max="2000" value="200"/>
                 <button id="sendButton">Legg til!</button>
             </div>
-            <div class="gameButtons">
-                <div class="gameButtonItem"></div>
-                <div class="gameButtonItem gameButton" id="gamePadUp">UP</div>
-                <div class="gameButtonItem"></div>
-                <div class="gameButtonItem gameButton" id="gamePadLeft">LEFT</div>
-                <div class="gameButtonItem gameButton" id="gamePadStart">START</div>
-                <div class="gameButtonItem gameButton" id="gamePadRight">RIGHT</div>
-                <div class="gameButtonItem"></div>
-                <div class="gameButtonItem gameButton" id="gamePadDown">DOWN</div>
-                <div class="gameButtonItem"></div>
+            <div class="pad-card card">
+                <ledwall-gamepad></ledwall-gamepad>
             </div>
         </div>
 
         <script type="module" id="main">
-            import { setGrid, goFullscreen, setMode, clearCanvas, clearMat, download, sendImageCanvas, loadPixels, textInput, createGrid,
-              toggleActive, frameDelay, upBtn, leftBtn, downBtn, rightBtn, gameStartBtn } from "./script.js";
+            import "./components.js?v=1"
+            import { onWallMode } from "./components.js?v=1"
+            import { setGrid, goFullscreen, clearCanvas, clearMat, sendImageCanvas, loadPixels, textInput, createGrid, frameDelay } from "./script.js?v=1";
             document.addEventListener("DOMContentLoaded", function () {
                 console.log("loaded")
-                document.getElementById("animMode").addEventListener("click", setMode)
-                document.getElementById("snakeMode").addEventListener("click", setMode)
-                document.getElementById("idleMode").addEventListener("click", setMode)
                 document.getElementById("fullscreen").addEventListener("click", goFullscreen)
                 document.getElementById("clearCanvasBtn").addEventListener("click", clearCanvas)
                 document.getElementById("clearMatBtn").addEventListener("click", clearMat)
@@ -146,15 +159,18 @@
                 document.getElementById("textInput").addEventListener("change", textInput)
                 document.getElementById("frameDelay").addEventListener("change", frameDelay)
                 document.getElementById("sendButton").addEventListener("click", sendImageCanvas)
-                document.getElementById("gamePadLeft").addEventListener("click", leftBtn)
-                document.getElementById("gamePadUp").addEventListener("click", upBtn)
-                document.getElementById("gamePadDown").addEventListener("click", downBtn)
-                document.getElementById("gamePadRight").addEventListener("click", rightBtn)
-                document.getElementById("gamePadStart").addEventListener("click", gameStartBtn)
                 const width = 24
                 const height = 18
                 setGrid(height, width)
                 createGrid()
+            })
+            // the drawing tools and pixel preview only make sense outside game modes
+            const canvasArea = document.getElementById("canvasArea")
+            const drawTools = document.getElementById("drawTools")
+            onWallMode((mode) => {
+                const gaming = mode === "SNAKE" || mode === "BREAKOUT"
+                canvasArea.classList.toggle("hidden-mode", gaming)
+                drawTools.classList.toggle("hidden-mode", gaming)
             })
         </script>
     </body>

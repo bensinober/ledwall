@@ -491,34 +491,7 @@ async function clearMat() {
   }
 }
 
-function setMode(e) {
-  const mode = e.target.value
-  console.log(mode)
-  try {
-    fetch(`/setMode/${mode}`)
-  } catch (err) {
-    console.log(err)
-  }
-}
-
-// NB: up down reversed
-function leftBtn() {
-  return fetch("/setDirection/left")
-}
-function upBtn() {
-  return fetch("/setDirection/down")
-}
-function rightBtn() {
-  return fetch("/setDirection/right")
-}
-function downBtn() {
-  return fetch("/setDirection/up")
-}
-function gameStartBtn() {
-  return fetch("/setMode/SNAKE") // or reset?
-}
-
+// mode/gamepad controls live in components.js as custom elements
 export {
-  setGrid, goFullscreen, setMode, createGrid, loadPixels, textInput, clearCanvas, clearMat, download, sendImageCanvas, toggleActive, start, frameDelay,
-  leftBtn, rightBtn, upBtn, downBtn, gameStartBtn,
+  setGrid, goFullscreen, createGrid, loadPixels, textInput, clearCanvas, clearMat, download, sendImageCanvas, toggleActive, start, frameDelay,
 }

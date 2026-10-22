@@ -10,7 +10,9 @@ const index_html = @embedFile("www/index.html");
 const index_adm_html = @embedFile("www/index-adm.html");
 const game_control_html = @embedFile("www/game-control.html");
 const snake_html = @embedFile("www/snake.html");
+const breakout_control_html = @embedFile("www/breakout-control.html");
 const script_js = @embedFile("www/script.js");
+const components_js = @embedFile("www/components.js");
 
 // the rest
 const gpiod = @import("gpiod.zig");
@@ -21,6 +23,7 @@ const img = @import("img.zig"); // TODO: use API to upload/convert images instea
 const eightbitFont = @import("eightbit_atari_stop2_font.zig");
 
 const snake = @import("snake.zig");
+const breakout = @import("breakout.zig");
 
 // GLOBALS
 var snakeGame: snake.Snake = snake.Snake{
@@ -32,9 +35,27 @@ var snakeGame: snake.Snake = snake.Snake{
     .playerY = 6,
     .cells = undefined,
     .food = undefined,
-    .delay = 500 * 1000 * 1000,
+    .delay = 500,
     .randomMove = false,
     .gameOver = false,
+};
+
+var breakoutGame: breakout.Breakout = breakout.Breakout{
+    .io = undefined,
+    .dir = .none,
+    .paddleX = 9,
+    .ballX = 11,
+    .ballY = 2,
+    .ballVx = -1,
+    .ballVy = 1,
+    .launched = false,
+    .bricks = undefined,
+    .bricksLeft = 0,
+    .lives = 3,
+    .score = 0,
+    .level = 1,
+    .gameOver = false,
+    .delay = breakout.base_delay,
 };
 
 // BLUEZ C WRAPPER
@@ -46,7 +67,16 @@ export fn zig_write_handler(data: [*]const u8, length: usize) void {
     std.debug.print("Zig received {d} bytes from GATT write: ", .{length});
     for (data[0..length]) |b| {
         std.debug.print("{x} ", .{b});
-        if (b == 0x61) { // a (left)
+        if (ledMode == .BREAKOUT) {
+            // breakout: a/d slides the paddle, w/s launches the ball
+            if (b == 0x61) { // a (left)
+                breakoutGame.dir = .left;
+            } else if (b == 0x64) { // d (right)
+                breakoutGame.dir = .right;
+            } else if (b == 0x73 or b == 0x77) { // s or w (fire)
+                breakoutGame.launch();
+            }
+        } else if (b == 0x61) { // a (left)
             snakeGame.newDirection = snake.Direction.left;
         } else if (b == 0x73) { // w (up)
             snakeGame.newDirection = snake.Direction.up;
@@ -64,6 +94,7 @@ pub const LEDMode = enum(u8) {
     IDLE,
     ANIMATION,
     SNAKE,
+    BREAKOUT,
     _,
 
     pub fn enum2str(self: LEDMode) []u8 {
@@ -194,13 +225,31 @@ pub const Server = struct {
                     http.Header{ .name = "Content-Length", .value = snakeLen },
                 },
             });
-        } else if (std.mem.eql(u8, req.head.target, "/script.js")) {
+        } else if (std.mem.eql(u8, req.head.target, "/breakout-control")) {
+            const breakoutControlLen = try std.fmt.allocPrint(self.allocator, "{d}", .{breakout_control_html.len});
+            try req.respond(breakout_control_html, .{
+                .status = .ok,
+                .extra_headers = &.{
+                    http.Header{ .name = "Content-Type", .value = "text/html" },
+                    http.Header{ .name = "Content-Length", .value = breakoutControlLen },
+                },
+            });
+        } else if (std.mem.startsWith(u8, req.head.target, "/script.js")) {
             const scriptLen = try std.fmt.allocPrint(self.allocator, "{d}", .{script_js.len});
             try req.respond(script_js, .{
                 .status = .ok,
                 .extra_headers = &.{
                     http.Header{ .name = "Content-Type", .value = "text/javascript" },
                     http.Header{ .name = "Content-Length", .value = scriptLen },
+                },
+            });
+        } else if (std.mem.startsWith(u8, req.head.target, "/components.js")) {
+            const componentsLen = try std.fmt.allocPrint(self.allocator, "{d}", .{components_js.len});
+            try req.respond(components_js, .{
+                .status = .ok,
+                .extra_headers = &.{
+                    http.Header{ .name = "Content-Type", .value = "text/javascript" },
+                    http.Header{ .name = "Content-Length", .value = componentsLen },
                 },
             });
             // LED CONTROL
@@ -309,7 +358,11 @@ pub const Server = struct {
                 if (i == 2) {
                     const mode = LEDMode.str2enum(p);
                     std.debug.print("NEW LedMode {any}!\n", .{mode});
-                    ledMode = mode.?;
+                    if (mode) |m| {
+                        ledMode = m;
+                        if (m == .BREAKOUT) breakoutGame.reset();
+                        if (m == .SNAKE) snakeGame.reset() catch |err| std.debug.print("Failed resetting snake: {any}\n", .{err});
+                    }
                 }
                 i += 1;
             }
@@ -319,12 +372,24 @@ pub const Server = struct {
             var i: usize = 0;
             while (paths.next()) |p| {
                 if (i == 2) {
-                    const dir = snake.Direction.str2enum(p);
-                    std.debug.print("NEW Direction {any}!\n", .{dir});
-                    snakeGame.newDirection = dir.?;
+                    if (ledMode == .BREAKOUT) {
+                        // breakout paddle: left|right latches the slide, stop releases it
+                        if (std.mem.eql(u8, p, "left")) breakoutGame.dir = .left;
+                        if (std.mem.eql(u8, p, "right")) breakoutGame.dir = .right;
+                        if (std.mem.eql(u8, p, "stop")) breakoutGame.dir = .none;
+                        std.debug.print("NEW BREAKOUT DIR {s}!\n", .{p});
+                    } else {
+                        const dir = snake.Direction.str2enum(p);
+                        std.debug.print("NEW Direction {any}!\n", .{dir});
+                        snakeGame.newDirection = dir.?;
+                    }
                 }
                 i += 1;
             }
+            try req.respond("OK", .{ .status = .ok, .transfer_encoding = .chunked });
+        } else if (req.head.method == .GET and std.mem.eql(u8, req.head.target, "/launchBall")) {
+            breakoutGame.launch();
+            std.debug.print("BREAKOUT ball launch requested!\n", .{});
             try req.respond("OK", .{ .status = .ok, .transfer_encoding = .chunked });
         } else if (req.head.method == .GET and std.mem.eql(u8, req.head.target, "/getMode")) {
             try req.respond(@tagName(ledMode), .{ .status = .ok, .transfer_encoding = .chunked });
@@ -566,6 +631,78 @@ pub const LedControl = struct {
         std.debug.print("SNAKE STATE: playerX: {d} playerY: {d}, lastDirection: {any}, length: {d}\n", .{ snakeGame.playerX, snakeGame.playerY, snakeGame.lastDirection, snakeGame.snakeLength });
     }
 
+    pub fn renderBreakout(self: *Self) !void {
+        if (breakoutGame.gameOver) {
+            try self.cols(0x0000ff00);
+            try self.setText(@constCast("GAME OVER"), 300, 0, 0x00ff0000, 9, 5);
+            try self.io.sleep(std.Io.Duration.fromMilliseconds(1000), .real);
+            try self.setText(@constCast("SCORE"), 300, 0, 0x00ff0000, 9, 5);
+            try self.io.sleep(std.Io.Duration.fromMilliseconds(1000), .real);
+
+            var scoreBuf: [12]u8 = undefined;
+            const scoreTxt = try std.fmt.bufPrint(&scoreBuf, "{d}", .{breakoutGame.score});
+            try self.setText(scoreTxt, 3000, 0, 0x00ff0000, 9, 5);
+            try self.renderImages();
+            try self.clearMat();
+            breakoutGame.reset();
+        }
+        breakoutGame.step();
+        var mat = createEmptyMat(0);
+        // game logic has y=0 at the bottom, but mat row 0 is the wall's TOP row
+        const matRow = struct {
+            fn y(logical_y: i32) usize {
+                return LEDSTRIP_ROWS - 1 - @as(usize, @intCast(logical_y));
+            }
+        }.y;
+        // brick row palette rotates with each level
+        const palettes = [_][4]u32{
+            [4]u32{ 0xff000000, 0xff800000, 0xff00ff00, 0xffffff00 }, // red, orange, yellow, white
+            [4]u32{ 0x0000ff00, 0x00ffffff, 0x00ff0000, 0xffffff00 }, // green, cyan, blue, white
+            [4]u32{ 0xffff0000, 0x00ffffff, 0xff00ff00, 0x0000ff00 }, // magenta, cyan, yellow, green
+        };
+        const brickCols = palettes[(breakoutGame.level - 1) % palettes.len];
+        for (breakoutGame.bricks, 0..) |row, r| {
+            const y: usize = matRow(breakout.brick_bottom_y + @as(i32, @intCast(r)));
+            const col = u32ToU8Bytes(brickCols[r]);
+            for (row, 0..) |alive, c| {
+                if (!alive) continue;
+                const x: usize = @intCast(c * 2);
+                mat[y][x] = col;
+                mat[y][x + 1] = col;
+            }
+        }
+        // paddle
+        const paddleCol = u32ToU8Bytes(0x0000ff00);
+        for (0..breakout.paddle_width) |i| {
+            const x: usize = @intCast(breakoutGame.paddleX + @as(i32, @intCast(i)));
+            mat[matRow(breakout.paddle_y)][x] = paddleCol;
+        }
+        // remaining lives as red dots on the bottom row
+        const lifeCol = u32ToU8Bytes(0xff000000);
+        var li: i32 = 0;
+        while (li < breakoutGame.lives) : (li += 1) {
+            const lx: usize = @intCast(li);
+            mat[matRow(0)][lx] = lifeCol;
+        }
+        // level as green dots starting from the middle of the bottom row
+        const levelCol = u32ToU8Bytes(0x0000ff00);
+        const level_dots: usize = @min(@as(usize, @intCast(breakoutGame.level)), 10);
+        const level_start: usize = LEDSTRIP_COLS / 2;
+        for (0..level_dots) |i| {
+            if (level_start + i < LEDSTRIP_COLS) {
+                mat[matRow(0)][level_start + i] = levelCol;
+            }
+        }
+        // ball
+        mat[matRow(breakoutGame.ballY)][@intCast(breakoutGame.ballX)] = u32ToU8Bytes(0xffffff00);
+        self.mat = mat;
+        self.renderMat();
+        if (@import("builtin").target.cpu.arch != std.Target.Cpu.Arch.x86_64) {
+            _ = ws2811.ws2811_render(self.ptr);
+        }
+        std.debug.print("BREAKOUT STATE: paddleX: {d} ball: {d},{d} vx: {d} vy: {d} lives: {d} score: {d} launched: {any}\n", .{ breakoutGame.paddleX, breakoutGame.ballX, breakoutGame.ballY, breakoutGame.ballVx, breakoutGame.ballVy, breakoutGame.lives, breakoutGame.score, breakoutGame.launched });
+    }
+
     pub fn renderTextAtPos(self: *Self, chars: []u8, x: i32, y: i32) !ArrayList(CharPixel) {
         var charPixels: ArrayList(CharPixel) = .empty;
         const width = 8;
@@ -793,6 +930,14 @@ pub const LedControl = struct {
                     std.debug.print("ns spent on snake render: {}\n", .{ns});
                     try self.io.sleep(std.Io.Duration.fromMilliseconds(@as(i64, @intCast(snakeGame.delay))), .real);
                 },
+                .BREAKOUT => {
+                    const start = std.Io.Clock.awake.now(self.io);
+                    try self.renderBreakout();
+                    var elapsed = start.untilNow(self.io, .awake);
+                    const ns = elapsed.toNanoseconds();
+                    std.debug.print("ns spent on breakout render: {}\n", .{ns});
+                    try self.io.sleep(std.Io.Duration.fromMilliseconds(@as(i64, @intCast(breakoutGame.delay))), .real);
+                },
                 else => {
                     std.debug.print("UNKNOWN STATE", .{});
                 },
@@ -914,6 +1059,8 @@ pub fn main(init: std.process.Init) !void {
     defer ledController.deinit();
     snakeGame.io = io;
     try snakeGame.reset();
+    breakoutGame.io = io;
+    breakoutGame.reset();
     // spawn ledrunner in separate thread
     const ledThread = try std.Thread.spawn(.{}, LedControl.runMatrix, .{&ledController});
     ledThread.detach();

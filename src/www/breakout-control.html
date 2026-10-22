@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Led Wall - Breakout</title>
+        <style>
+            :root { color-scheme: dark; }
+            body {
+                font-family: system-ui, sans-serif;
+                background: radial-gradient(1000px 500px at 50% -10%, #182233 0%, #0e1116 60%);
+                color: #e6e9ef;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 20px;
+                margin: 0;
+                padding: 24px 16px;
+                min-height: 100vh;
+                user-select: none;
+                -webkit-user-select: none;
+                touch-action: manipulation;
+            }
+            h1 { margin: 0; font-size: 1.4rem; }
+            h1 span { color: #38bdf8; }
+            .card {
+                background: #161b22;
+                border: 1px solid #262e3a;
+                border-radius: 16px;
+                padding: 24px;
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Breakout <span>(24x18)</span></h1>
+        <ledwall-mode-bar></ledwall-mode-bar>
+        <div class="card">
+            <ledwall-gamepad></ledwall-gamepad>
+        </div>
+        <script type="module">
+            import { armBreakout } from "./components.js?v=1"
+            // opening this page arms the wall for breakout
+            armBreakout()
+        </script>
+    </body>
+</html>

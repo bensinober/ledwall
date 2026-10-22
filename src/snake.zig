@@ -56,7 +56,7 @@ pub const Snake = struct {
     playerY: i32,
     cells: [numCells]Cell,
     food: i32, // always just one
-    delay: u64, // inverted speed
+    delay: u64, // frame time in ms
     randomMove: bool,
     gameOver: bool,
 
@@ -75,7 +75,7 @@ pub const Snake = struct {
         self.playerY = 2;
         self.cells = cells;
         self.food = undefined;
-        self.delay = 200 * 1000 * 1000;
+        self.delay = 200;
         self.randomMove = false;
         self.gameOver = false;
         self.placeFood();
